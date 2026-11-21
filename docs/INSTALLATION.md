@@ -48,11 +48,13 @@ mutable and may change incompatibly; no stable package version is available
 yet. The generated-project browser acceptance test exercises dependency
 installation and app behavior.
 
-The currently reachable upstream branch still declares `ext-pdo_mysql` as a
-package requirement. Until that metadata change is available upstream,
-generated-app installation requires the PHP MySQL PDO extension even if the
-application itself does not use MySQL; it does not require a running MySQL
-server for installation.
+The scaffold installs `morave/nora` from a moving VCS branch (`dev-main`), so
+dependency metadata and extension requirements may change over time. In a
+2026-11-21 verification (resolved to commit `a6db327`), the installed package
+metadata required `ext-pdo` and suggested `ext-pdo_mysql` rather than requiring
+`ext-pdo_mysql`. A running MySQL server is not required for Composer/npm
+installation. Verify requirements against the resolved commit in your
+environment.
 
 Run `npm run nora:assets:dev` in another terminal for CSS watch mode. Tailwind
 CSS is compiled locally by the official Tailwind v4 CLI; no CDN or runtime

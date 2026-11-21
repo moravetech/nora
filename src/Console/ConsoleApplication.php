@@ -1152,8 +1152,8 @@ PHP;
     {
         return "Nora Framework CLI\n\n"
             . "Usage: php bin/nora <command> [arguments]\n\n"
-            . "  --help                 Show this help\n"
-            . "  --version              Show the framework development version\n"
+            . "  --help, -h, help, list Show this help\n"
+            . "  --version, -V          Show the framework development version\n"
             . "  new <name>             Create a safe starter application\n"
             . "  make:controller <name> Generate a controller under src/Controllers\n"
             . "  make:model <name>      Generate a model under src/Models\n"

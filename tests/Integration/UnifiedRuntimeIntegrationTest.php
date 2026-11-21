@@ -164,6 +164,66 @@ final class UnifiedRuntimeIntegrationTest extends TestCase
         self::assertNotSame($connection, $manager->connection());
     }
 
+    public function testEndToEndLifecycleBootstrapsProvidersMiddlewareRoutesEventsAndCleanup(): void
+    {
+        UnifiedRuntimeLifecycleListener::reset();
+        $root = $this->createApplication([
+            'config/app.php' => "<?php\nreturn ['providers' => ['Nora\\\\Database\\\\DatabaseServiceProvider', 'Nora\\\\Events\\\\EventServiceProvider', '" . addslashes(UnifiedRuntimeMarkerProvider::class) . "'], 'events' => ['listeners' => ['application.booted' => ['" . addslashes(UnifiedRuntimeLifecycleListener::class) . "'], 'application.terminated' => ['" . addslashes(UnifiedRuntimeLifecycleListener::class) . "'], 'runtime.handled' => ['" . addslashes(UnifiedRuntimeLifecycleListener::class) . "']]]];\n",
+            'config/database.php' => "<?php\nreturn ['default' => 'sqlite', 'connections' => ['sqlite' => ['driver' => 'sqlite', 'database' => ':memory:']]];\n",
+            'routes.php' => <<<'PHP'
+<?php
+
+use Nora\Core\Application;
+use Nora\Events\EventDispatcher;
+use Nora\Http\Request;
+use Nora\Http\Response;
+use Nora\Routing\MiddlewareInterface;
+
+return static function (Application $app): void {
+    $app->middleware(new class implements MiddlewareInterface {
+        public function process(Request $request, callable $next): Response
+        {
+            $response = $next($request);
+
+            return $response->withHeader('X-Phase4-Middleware', 'ok');
+        }
+    });
+
+    $app->route('GET', '/health', static function () use ($app): Response {
+        $dispatcher = $app->container()->get(EventDispatcher::class);
+        if ($dispatcher instanceof EventDispatcher) {
+            $dispatcher->dispatch('runtime.handled', ['event' => 'runtime.handled']);
+        }
+
+        return Response::json(['status' => 'ok']);
+    });
+};
+PHP,
+        ]);
+
+        $app = (new ApplicationBootstrap())->boot($root);
+        self::assertTrue($app->hasBeenBooted());
+        self::assertTrue($app->container()->has('unified.runtime.marker'));
+        self::assertSame('registered-and-booted', $app->container()->get('unified.runtime.marker')->value);
+
+        $response = $app->handle(\Nora\Http\Request::fromUri('GET', '/health'));
+        self::assertSame(200, $response->status());
+        self::assertSame('ok', $response->headers()['X-Phase4-Middleware'] ?? null);
+        self::assertSame('{"status":"ok"}', $response->body());
+
+        /** @var DatabaseManager $manager */
+        $manager = $app->container()->get(DatabaseManager::class);
+        $connection = $manager->connection();
+        self::assertTrue($manager->hasResolvedConnection('sqlite'));
+
+        $app->terminate();
+
+        self::assertContains('application.booted', UnifiedRuntimeLifecycleListener::$events);
+        self::assertContains('runtime.handled', UnifiedRuntimeLifecycleListener::$events);
+        self::assertContains('application.terminated', UnifiedRuntimeLifecycleListener::$events);
+        self::assertNotSame($connection, $manager->connection());
+    }
+
     /**
      * @param array<string, string> $files
      */

@@ -6,7 +6,7 @@
 
 Nora is an independent, modular PHP application framework created in Morocco by **Morave Technologies** (`Yasser-devb`). It provides an explicit PHP-first core for HTTP applications, configuration/bootstrap, dependency injection, service providers, routing and middleware, database/ORM APIs, events, CLI tooling, and an experimental server-rendered reactive runtime that can be styled with Tailwind CSS.
 
-Nora has its own framework core and public APIs. Laravel and Symfony are not runtime dependencies. The project is evolving and should be treated as early-stage software unless a specific capability and environment are verified in this repository and your target setup.
+Nora has its own framework core and public APIs. Laravel and Symfony are not runtime dependencies. The project is in active development and is **pre-stable (maturing)**: core runtime, database, CLI, and tooling capabilities are increasingly integrated and tested, but APIs, workflows, and environment-specific behavior may still evolve. Evaluate and use each capability based on verified implementation and your target environment.
 
 - **Repository:** [moravetech/nora](https://github.com/moravetech/nora)
 - **Maintainer identity:** [Yasser-devb](https://github.com/Yasser-devb)
@@ -658,6 +658,7 @@ Contributions are welcome through issues/discussions and pull requests in the of
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SUPPORT.md](SUPPORT.md)
 - [RELEASE_POLICY.md](RELEASE_POLICY.md)
 - [SECURITY.md](SECURITY.md)
 

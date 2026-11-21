@@ -21,10 +21,34 @@ All notable changes are recorded here. Follow the
 - **Security (P2-04 mitigation):** add ORM mass-assignment controls
   (`$fillable`, `$guarded`, `forceFill()`, `isFillable()`/`isGuarded()`) with
   backward-compatible default behavior and regression tests.
-- **CLI/DX:** add `php nora list` as a help alias for command discoverability.
+- **CLI/DX:** add and document `php nora list` as a help alias for command
+  discoverability.
+- **Runtime integration (Phase 4):** improve unified runtime cohesion with
+  application lifecycle events/termination hooks, database connection cleanup
+  support, ORM/manager/provider alignment, and more traceable CLI database
+  command bootstrap behavior while preserving compatibility fallbacks.
+- **CI/DB:** grant required MySQL privileges (including `REFERENCES`, `UPDATE`)
+  for the CI test database user to support account lifecycle foreign key setup.
 - **Release engineering:** add Phase 3 audit/test results, readiness report,
   RC checklist, release notes draft, and migration guide under `docs/audit/`
   and `docs/releases/`.
+- **Stabilization (Phase 4, RC1 track):** add a PostgreSQL-gated integration
+  test for repeatable parameterized write/transaction/migration-runner
+  verification (`tests/Integration/DatabaseServerPostgreSqlTest.php`) and
+  strengthen unified runtime E2E coverage
+  (`tests/Integration/UnifiedRuntimeIntegrationTest`). Verify scaffold
+  generation (`php bin/nora new`), generated PHP lint, and external-developer
+  install/build/test flow in an isolated temp app using the default remote VCS
+  dependency manifest (`composer install`, `.env` setup, `npm install`,
+  `npm run nora:assets:build`, and installed-context PHPUnit pass with HTTP
+  runtime smoke for `/welcome` and `/`). Add/update Phase 4 audit, test
+  results, readiness, and RC checklist artifacts with factual evidence. Live
+  MySQL/PostgreSQL integration execution and CI/release-commit gates remain
+  not verified in this environment.
+- **Documentation & metadata:** modernize `README.md` with evidence-based
+  architecture/status coverage and Mermaid diagram; improve `.env.example`,
+  CLI help clarity, and Composer metadata/support links for clearer project
+  maturity signals.
 
 ## v0.2.1 — 2026-10-28
 
