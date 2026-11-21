@@ -157,6 +157,14 @@ independently of the request kernel.
 - `Console`: functional scaffold, generators, migration commands, and dev server.
 - `Reactive`: opt-in SSR page components, explicit validated actions,
   session-owned state, CSRF/revision checks, and one delegated browser runtime.
+- Tailwind CSS: generated/application-owned CSS is compiled with the official
+  v4 CLI and served as a same-origin static file; PHP rendering and reactive
+  reconciliation remain framework-owned.
+
+Generated projects scan their explicit application source directories rather
+than dependencies or compiled output. Existing applications retain the legacy
+Nora stylesheet by default and may mount their compiled Tailwind stylesheet
+without changing the reactive engine or runtime.
 
 Independent child-state coordination, reactive forms, navigation, durable
 mutation idempotency, and real-time transport are not implemented. Optional

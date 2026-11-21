@@ -15,6 +15,7 @@ use Nora\Reactive\Components\Card;
 use Nora\Reactive\Components\Checkbox;
 use Nora\Reactive\Components\Breadcrumb;
 use Nora\Reactive\Components\DataTable;
+use Nora\Reactive\Components\Dropdown;
 use Nora\Reactive\Components\EmptyState;
 use Nora\Reactive\Components\Field;
 use Nora\Reactive\Components\Layout;
@@ -31,6 +32,7 @@ use Nora\Reactive\Components\Spinner;
 use Nora\Reactive\Components\StatCard;
 use Nora\Reactive\Components\SwitchControl;
 use Nora\Reactive\Components\Table;
+use Nora\Reactive\Components\Tabs;
 use Nora\Reactive\Components\Textarea;
 use Nora\Reactive\Components\Toast;
 use Nora\Reactive\Components\Tooltip;
@@ -56,6 +58,125 @@ final class ReactiveUiTest extends TestCase
                 . '<input disabled="" value="&quot;quoted&quot;">',
             $markup,
         );
+    }
+
+    public function testHtmlAttributesForwardSafelyAndSupportTailwindClassComposition(): void
+    {
+        $control = UI::element('input', [
+            'aria-label' => 'Email address',
+            'role' => 'switch',
+            'tabindex' => 0,
+            'form' => 'profile-form',
+            'class' => 'w-full rounded-lg',
+            'title' => 'Profile "email"',
+        ])->withAttributes([
+            'class' => 'focus:ring-2',
+            'data-state' => 'ready',
+        ])->toHtml();
+        self::assertSame(
+            '<input aria-label="Email address" role="switch" tabindex="0" form="profile-form" '
+                . 'title="Profile &quot;email&quot;" data-state="ready" class="w-full rounded-lg focus:ring-2">',
+            $control,
+        );
+
+        $button = Button::render([], 'Save', [
+            'class' => 'rounded-lg px-4 hover:bg-indigo-700',
+            'aria-label' => 'Save profile',
+            'tabindex' => 0,
+        ])->toHtml();
+        self::assertStringContainsString(
+            'class="nora-button nora-button--primary nora-button--medium rounded-lg px-4 hover:bg-indigo-700"',
+            $button,
+        );
+        self::assertStringContainsString('aria-label="Save profile" tabindex="0"', $button);
+
+        $card = Card::render([], new Slots(), [
+            'class' => 'rounded-2xl shadow-sm',
+            'role' => 'region',
+            'aria-label' => 'Account summary',
+        ])->toHtml();
+        self::assertStringContainsString('class="nora-card rounded-2xl shadow-sm"', $card);
+        self::assertStringContainsString('role="region" aria-label="Account summary"', $card);
+
+        $modal = Modal::render(
+            ['id' => 'profile-modal', 'title' => 'Profile'],
+            UI::text('Profile details'),
+            ['class' => 'max-w-xl', 'aria-label' => 'Edit profile'],
+        )->toHtml();
+        self::assertStringContainsString('class="nora-modal max-w-xl"', $modal);
+        self::assertStringContainsString('aria-label="Edit profile"', $modal);
+
+        $tabs = Tabs::render('profile-tabs', 'Profile sections', [
+            ['id' => 'details', 'label' => 'Details', 'content' => UI::text('Profile details')],
+        ], null, ['class' => 'w-full overflow-hidden', 'aria-label' => 'Profile sections']);
+        self::assertStringContainsString('class="nora-tabs w-full overflow-hidden"', $tabs->toHtml());
+        self::assertStringContainsString('aria-label="Profile sections"', $tabs->toHtml());
+    }
+
+    public function testForwardedHtmlAttributesStillRejectExecutableAttributesAndEscapeUnsafeValues(): void
+    {
+        self::assertSame(
+            '<div class="&quot;&gt;&lt;script&gt;" title="A &amp; B">&lt;unsafe&gt;</div>',
+            UI::element('div', [
+                'class' => '"><script>',
+                'title' => 'A & B',
+            ], '<unsafe>')->toHtml(),
+        );
+        self::assertSame(
+            '<div class="base added"></div>',
+            UI::element('div', ['CLASS' => 'base'])->withAttributes(['class' => 'added'])->toHtml(),
+        );
+
+        $this->expectException(InvalidArgumentException::class);
+        UI::element('button')->withAttributes(['onclick' => 'alert(1)']);
+    }
+
+    public function testModalAndTabsProtectTheirReactiveProtocolAttributes(): void
+    {
+        foreach ([
+            static fn () => Modal::render(
+                ['id' => 'profile-modal', 'title' => 'Profile'],
+                UI::text('Details'),
+                ['data-nora-modal-state' => 'open'],
+            ),
+            static fn () => Tabs::render('profile-tabs', 'Profile', [
+                ['id' => 'details', 'label' => 'Details', 'content' => UI::text('Profile details')],
+            ], null, ['data-nora-tabs' => false]),
+            static fn () => Dropdown::render(
+                ['label' => 'Actions'],
+                UI::text('Open'),
+                ['data-nora-dropdown' => false],
+            ),
+        ] as $renderWithInvalidAttributes) {
+            try {
+                $renderWithInvalidAttributes();
+                self::fail('Component protocol attributes must not be overridden.');
+            } catch (InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
+    public function testTailwindAttributesForwardToDropdownAndTableElements(): void
+    {
+        $dropdown = Dropdown::render(
+            ['label' => 'Actions'],
+            UI::element('a', ['href' => '/profile'], 'Profile'),
+            ['class' => 'w-48 rounded-lg', 'aria-label' => 'Profile actions'],
+        )->toHtml();
+        self::assertStringContainsString('class="nora-dropdown w-48 rounded-lg"', $dropdown);
+        self::assertStringContainsString('aria-label="Profile actions"', $dropdown);
+
+        $table = Table::render(
+            ['caption' => 'Members'],
+            ['Name'],
+            [['name' => 'Amina']],
+            static fn (array $row): string => $row['name'],
+            static fn (array $row): array => [$row['name']],
+            ['class' => 'min-w-full text-left', 'aria-label' => 'Team members'],
+        )->toHtml();
+        self::assertStringContainsString('class="nora-table min-w-full text-left"', $table);
+        self::assertStringContainsString('aria-label="Team members"', $table);
     }
 
     public function testUnsafeTagsAttributesAndUrlsAreRejected(): void

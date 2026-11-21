@@ -25,6 +25,11 @@ final class Container
     private array $instances = [];
 
     /**
+     * @var array<string, string>
+     */
+    private array $aliases = [];
+
+    /**
      * @var list<string>
      */
     private array $resolving = [];
@@ -45,12 +50,24 @@ final class Container
     {
         $this->assertIdentifier($id);
         $this->assertCompatible($id, $instance);
-        unset($this->bindings[$id]);
+        unset($this->bindings[$id], $this->aliases[$id]);
         $this->instances[$id] = $instance;
+    }
+
+    public function alias(string $alias, string $id): void
+    {
+        $this->assertIdentifier($alias);
+        $this->assertIdentifier($id);
+        if ($alias === $id) {
+            throw new ResolutionException('A service alias cannot reference itself.');
+        }
+        $this->aliases[$alias] = $id;
     }
 
     public function has(string $id): bool
     {
+        $id = $this->resolveAlias($id);
+
         return isset($this->instances[$id])
             || isset($this->bindings[$id])
             || class_exists($id);
@@ -58,6 +75,11 @@ final class Container
 
     public function get(string $id): object
     {
+        $id = $this->resolveAlias($id);
+
+        if (isset($this->instances[$id])) {
+            return $this->instances[$id];
+        }
         if (isset($this->instances[$id])) {
             return $this->instances[$id];
         }
@@ -183,6 +205,21 @@ final class Container
                 'The service registered for "' . $id . '" must be an instance of that type.',
             );
         }
+    }
+
+    private function resolveAlias(string $id): string
+    {
+        $resolved = $id;
+        $seen = [];
+        while (isset($this->aliases[$resolved])) {
+            if (isset($seen[$resolved])) {
+                throw new ResolutionException('Circular alias detected: ' . $resolved);
+            }
+            $seen[$resolved] = true;
+            $resolved = $this->aliases[$resolved];
+        }
+
+        return $resolved;
     }
 
     private function assertIdentifier(string $id): void

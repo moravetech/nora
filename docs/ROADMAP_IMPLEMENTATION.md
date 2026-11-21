@@ -5,6 +5,26 @@ commitments. This document turns the high-level
 [roadmap](ROADMAP.md) into independently reviewable work items. It does not
 describe planned APIs as implemented.
 
+**Latest stabilization pass:** 2026-10-29. Baseline Composer, browser,
+Tailwind, syntax, and whitespace checks passed before changes. This pass fixed
+the confirmed rate-limit middleware bypass (over-limit requests previously
+ran the downstream handler before returning 429) and removed `pdo_mysql` as a
+package-wide install requirement. Current verification results and remaining
+limitations are recorded in
+[implementation status](audit/IMPLEMENTATION_STATUS.md).
+
+### Verified findings and next priorities
+
+| Priority | Finding | Status / next action |
+|---|---|---|
+| P1 | Exhausted `RateLimitMiddleware` requests invoked the downstream handler before returning 429. | Fixed; focused regression asserts the handler runs only for allowed requests. |
+| P1 | The root package required `pdo_mysql`, even for consumers that do not use database features. | Fixed; PDO remains required and MySQL/MariaDB's driver is suggested. Other PDO drivers are not verified. |
+| P0 | No public package release has been verified. Generated projects use the official Git VCS source and moving `dev-main` branch. | Clean remote installation is verified; publish and approve a stable tag before recommending a pinned production dependency. The package archive has a separate clean-consumer check. |
+| P1 | The generated application and CLI now use a source-first layout with a PHPUnit welcome-route feature test and explicit controller/view registration. | Locally verified in the generated-project browser test, including independent dependency installation from the configured VCS source. |
+| P1 | Account lifecycle support has provider/notifier contracts, registration, email verification, password reset, and an optional transactional PDO/MySQL store. | Unit tests cover token expiry/replay and unverified-login rejection. Run the dedicated MySQL integration on CI; HTTP/mail wiring, MFA, deletion, and session revocation after password reset remain open. |
+| P0 | No independent security review has been performed. | Remains a release gate; automated checks are not a substitute. |
+| P1 | Local MySQL server and additional PDO drivers are unavailable/unverified in this environment. | Run database integration on the configured MySQL CI service; decide and test any additional driver support separately. |
+
 ## Planning basis and status definitions
 
 This audit is based on the source, tests, Composer metadata, CI workflow, and
@@ -31,7 +51,7 @@ readiness.
 | Priority | Work item | Current status | Dependencies | Size |
 |---|---|---|---|---|
 | P0 | [NORA-BASE-01: Verify database behavior against a real server](#nora-base-01--verify-database-behavior-against-a-real-server) | Implemented but insufficiently tested | None | M |
-| P0 | [NORA-BASE-02: Automate clean package-consumer verification](#nora-base-02--automate-clean-package-consumer-verification) | Implemented but insufficiently tested | None | M |
+| P0 | [NORA-BASE-02: Automate clean package-consumer verification](#nora-base-02--automate-clean-package-consumer-verification) | CI verification script/workflow implemented; fresh run remains a release check | None | M |
 | P0 | [NORA-SEC-01: Close request and rendering security-boundary gaps](#nora-sec-01--close-request-and-rendering-security-boundary-gaps) | Partially implemented | None | M/L |
 | P1 | [NORA-OPS-01: Provide a disposable Docker development database](#nora-ops-01--provide-a-disposable-docker-development-database) | Missing | BASE-01 | M |
 | P1 | [NORA-SEC-02: Add a storage-backed rate limiter](#nora-sec-02--add-a-storage-backed-rate-limiter) | Implemented; local tests pass | SEC-01 | M/L |
@@ -93,10 +113,10 @@ out per item.
 
 ### NORA-BASE-02 — Automate clean package-consumer verification
 
-- **Problem / current status:** A Composer archive was manually installed in a
-  clean temporary consumer, including an autoload/bootstrap/CLI smoke test.
-  The root Composer package excludes tests/examples and development tools;
-  the clean-install check is not yet a repeatable CI gate.
+- **Problem / current status:** `.github/scripts/verify-package-archive.php`
+  and the `package-consumer` CI job build and inspect the archive, install it
+  into a clean temporary consumer, and check autoload/bootstrap/CLI behavior.
+  Re-run the script for the current uncommitted changes before release.
 - **Scope / out of scope:** Add a non-publishing CI job that builds the
   package archive, inspects required and excluded paths, installs the archive
   into a temporary consumer, exercises PSR-4 autoloading, a route registered
@@ -179,7 +199,9 @@ out per item.
 ### NORA-SEC-02 — Add a storage-backed rate limiter
 
 - **Problem / current status:** Implemented as an opt-in fixed-window limiter
-  with a file-backed store and middleware. It is not automatically registered.
+  with a file-backed store and middleware. Exhausted requests are rejected
+  before the downstream handler; a regression test asserts the handler is not
+  invoked. It is not automatically registered.
 - **Scope / out of scope:** `RateLimitStoreInterface` defines atomic bucket
   updates and cleanup; `FileRateLimitStore` uses hashed bucket filenames,
   exclusive file locking, and atomic replacement. No PDO, Redis, distributed,

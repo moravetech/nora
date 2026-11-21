@@ -66,9 +66,17 @@ final class ApplicationBootstrap
             }
         }
 
+        $databaseConfig = $this->loadConfigFile(
+            $root . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'database.php',
+        );
+        if ($databaseConfig !== [] && !isset($databaseConfig['database'])) {
+            $databaseConfig = ['database' => $databaseConfig];
+        }
+
         $sources = [
             ['app' => ['environment' => 'production', 'debug' => false], 'logging' => ['level' => 'info']],
             $applicationConfig,
+            $databaseConfig,
             $this->loadConfigFile(
                 $root . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . $environment . '.php',
             ),
@@ -96,7 +104,12 @@ final class ApplicationBootstrap
                 $this->errorResponseFactory,
             ),
             config: $config,
+            basePath: $root,
         );
+
+        $this->registerConfiguredProviders($app, $config);
+        $app->boot();
+
         $routes = $this->routeFile($root);
         if ($routes !== null) {
             $register = require $routes;
@@ -107,6 +120,36 @@ final class ApplicationBootstrap
         }
 
         return $app;
+    }
+
+    /**
+     * @param Config $config
+     */
+    private function registerConfiguredProviders(Application $app, Config $config): void
+    {
+        $rawProviders = $config->get('providers');
+        if ($rawProviders === null) {
+            $rawProviders = $config->get('app.providers');
+        }
+
+        if ($rawProviders === null) {
+            // Default core providers for unified runtime integration when not explicitly configured.
+            $providers = [
+                \Nora\Database\DatabaseServiceProvider::class,
+                \Nora\Events\EventServiceProvider::class,
+            ];
+        } elseif (!is_array($rawProviders)) {
+            throw new ConfigException('The configured providers list must be an array.');
+        } else {
+            $providers = $rawProviders;
+        }
+
+        foreach ($providers as $provider) {
+            if (!is_string($provider) || trim($provider) === '') {
+                throw new ConfigException('Each configured provider must be a non-empty class name string.');
+            }
+            $app->register($provider);
+        }
     }
 
     /**

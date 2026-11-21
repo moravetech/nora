@@ -37,9 +37,21 @@ final class Button
         foreach (array_keys($attributes) as $name) {
             if (
                 !is_string($name)
-                || in_array(strtolower($name), ['type', 'disabled', 'class', 'data-nora-action', 'data-nora-args'], true)
+                || in_array(strtolower($name), ['type', 'disabled', 'data-nora-action', 'data-nora-args'], true)
             ) {
                 throw new InvalidArgumentException('Button attributes cannot override component or action properties.');
+            }
+        }
+
+        $userClass = '';
+        foreach ($attributes as $name => $value) {
+            if (is_string($name) && strtolower($name) === 'class') {
+                if (!is_string($value)) {
+                    throw new InvalidArgumentException('A button class attribute must be a string.');
+                }
+                $userClass = $value;
+                unset($attributes[$name]);
+                break;
             }
         }
 
@@ -47,6 +59,9 @@ final class Button
             . ' nora-button--' . $resolved->get('size');
         if ($resolved->get('loading')) {
             $class .= ' nora-button--loading';
+        }
+        if ($userClass !== '') {
+            $class .= ' ' . $userClass;
         }
         $attributes = [
             ...$attributes,

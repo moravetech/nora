@@ -13,8 +13,13 @@ final class Dropdown
     /**
      * @param array<string, mixed> $props
      */
-    public static function render(array $props, SafeHtml $items): SafeHtml
+    public static function render(array $props, SafeHtml $items, array $attributes = []): SafeHtml
     {
+        foreach (array_keys($attributes) as $name) {
+            if (!is_string($name) || strtolower($name) === 'data-nora-dropdown') {
+                throw new \InvalidArgumentException('Dropdown attributes cannot override its runtime marker.');
+            }
+        }
         $resolved = Props::resolve([
             'label' => ['type' => 'string', 'required' => true],
         ], $props);
@@ -34,6 +39,6 @@ final class Dropdown
                 'role' => 'group',
                 'aria-label' => $resolved->get('label'),
             ], $items),
-        ]);
+        ])->withAttributes($attributes);
     }
 }

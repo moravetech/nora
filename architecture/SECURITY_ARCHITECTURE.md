@@ -30,7 +30,8 @@ security certification.
   `hash_equals`; it is opt-in and should be attached to browser/session routes.
 - The opt-in fixed-window rate limiter uses a file-backed store with hashed
   keys, a directory-wide exclusive lock, and atomic state-file replacement.
-  Storage failures fail closed with a generic 503 response.
+  Exhausted requests are stopped before the downstream handler; storage
+  failures fail closed with a generic 503 response.
 - Upload validation uses PHP upload status, bounded sizes, actual file-content
   MIME detection, and a configured extension/MIME allowlist. The local private
   store uses random identifiers and does not use client filenames as paths.
@@ -49,10 +50,10 @@ security certification.
 | HTTP input | Request method/path checks, JSON/form parsing, bounded `Request::fromGlobals()` body reads, access to PHP-parsed multipart upload fields | Upstream size limits are required before PHP; directly constructed requests are caller-supplied; general schema policy remains application-owned |
 | Database | PDO prepared values and safe query-builder identifiers | Raw SQL remains caller-authored; live MySQL not tested |
 | Session | Secure cookie defaults and ID rotation | No session expiry policy, store backend, or deployment proxy policy |
-| Authentication | Session resolver and password-login service with application-owned account provider, password rehashing, and required fixed-window limiter | Registration, persistence schema, verification/reset tokens, MFA, and account lifecycle remain unimplemented |
+| Authentication | Session resolver, password-login and account-lifecycle services, email-verification gating, one-time expiring verification/reset tokens, provider interfaces, optional transactional PDO/MySQL adapter, and required fixed-window limiter | No HTTP controllers/mail transport, MFA, recovery codes, account deletion, or reset-driven session revocation; live MySQL integration is not locally verified |
 | Authorization | Explicit Gate abilities, deny-by-default | Applications must define and enforce every resource policy |
 | CSRF | Opt-in unsafe-method middleware; reactive endpoints also check origin/fetch metadata | Stateless API policy is application configuration |
-| Rate limiting | Opt-in fixed-window `RateLimitMiddleware`; application supplies the bucket key; file updates are locked and hashed | Single-host/local filesystem only unless shared locking is verified; not a volumetric DoS control; storage errors return 503 |
+| Rate limiting | Opt-in fixed-window `RateLimitMiddleware`; application supplies the bucket key; exhausted requests do not reach the handler; file updates are locked and hashed | Single-host/local filesystem only unless shared locking is verified; not a volumetric DoS control; storage errors return 503 |
 | Uploads | `Request::file()` / `files()`, PHP upload status checks, per-file and aggregate byte limits, fileinfo MIME allowlist, random-ID private filesystem storage, and an opt-in authorization gate before private reads | No malware scan, quota/retention scheduler, metadata repository, streaming response, or cloud backend; application must persist metadata, authorize access, configure ACLs, and integrate large-file streaming |
 | Rendering | Escaped values and root-confined includes | Only HTML text interpolation is escaped; JS/CSS/URL contexts are not specialized |
 | CLI | Allowlisted names and exclusive file creation | Local operators still control the executable and project directory |

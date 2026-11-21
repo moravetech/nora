@@ -1,25 +1,26 @@
 # Nora Implementation Status
 
-**Updated:** 2026-10-28
+**Updated:** 2026-10-29
 
 | Area | Status | Evidence / limitation |
 |---|---|---|
 | Initial repository audit | Implemented | Original empty-repository state recorded in `INITIAL_AUDIT.md` |
-| Composer PSR-4 package | Implemented, tested | `composer validate --strict`; local Composer install |
+| Composer PSR-4 package | Implemented, tested | `composer validate --strict`; local Composer install and offline archive consumer install. Neither proves public Packagist availability. |
 | Bootstrap and request lifecycle | Implemented, tested | Unit/integration tests; generated app served over HTTP with status 200 |
 | Configuration and `.env` loading | Implemented, tested | Layer precedence, required/type checks, process-variable precedence |
 | Exception handling/logging | Implemented, tested | Safe response mapping and structured redaction tests |
 | Validation | Implemented, tested | Unit tests for built-in/custom rules and nested fields |
-| PDO/query/migrations/diagnostics | Implemented, tested | CRUD builders, nested savepoints, migration tracking, and opt-in query diagnostics; MySQL 8.4 integration passed in hosted CI at `2183336`; local DB and MariaDB remain unverified |
-| CLI | Implemented, tested | Help/version, scaffold, component generator, safe overwrite behavior; `serve` delivered a clean generated reactive app |
-| Sessions/auth/authorization/CSRF | Partially implemented, tested | Session integration plus provider-based password login, account status checks, generic credential rejection, password rehash, and required rate limiting; registration, persistence schema, verification/reset, MFA, and account lifecycle remain absent |
-| Rate limiting | Experimental, opt-in | File-backed fixed-window store and middleware have unit coverage; single-host/shared-filesystem locking and deployment permissions require verification |
+| PDO/query/migrations/diagnostics | Implemented, tested | PDO is required; the MySQL/MariaDB PDO driver is optional at package-install time. CRUD builders, nested savepoints, migration tracking, and query diagnostics have coverage; MySQL 8.4 integration passed in hosted CI at `2183336`; local DB and other PDO drivers remain unverified |
+| CLI | Implemented, locally tested | Help/version; generated app with production-safe config, Composer test setup, explicit routes, controller/view, reactive page, Tailwind v4 scripts; controller/model/middleware/service/reactive-component/view/test generators with name and overwrite checks. Generated app VCS installation, PHPUnit, Tailwind build, and full Chromium acceptance pass with an isolated Composer/Git configuration. The dependency follows mutable `dev-main`, not a stable release. |
+| Sessions/auth/authorization/CSRF | Partially implemented, unit tested | Session integration plus password login, unverified-account rejection, rate-limited registration, generic verification/reset requests, hashed one-time expiry tokens, and atomic PDO/MySQL store/migration. Mail delivery/routes are app-owned; MFA, account deletion, session revocation on reset, and local live MySQL verification remain outstanding. |
+| Rate limiting | Experimental, opt-in; locally tested | File-backed fixed-window store fails closed, and exhausted requests now stop before the downstream handler; single-host/shared-filesystem locking and deployment permissions still require verification |
 | Upload intake and private storage | Partial, unit tested | Bounded PHP upload validation, MIME policy, private local storage, and authorization-before-read; live multipart behavior, deployment ACLs, metadata, and large-file streaming remain unverified |
 | View rendering | Implemented, tested | Escaped values, includes, path/cycle guards |
 | Reactive UI | Experimental, tested | Composable `Component`/`UI`/`SafeHtml` API, typed props, named slots, reusable components, bundled theme, demo, and existing explicit authorization/CSRF/revision/nested-state/form behavior have PHP and local Chromium coverage; API remains unstable and is not production certified |
+| Tailwind CSS | Implemented, tested | Official Tailwind CSS v4.3.3 CLI build, explicit PHP/template source detection, same-origin production CSS, class/attribute forwarding, and Tailwind dashboard have local build and Chromium coverage; v3 configuration remains user-managed |
 | Nora website example | Excluded from framework release | Local standalone project remains on disk; its implementation and website-specific tests are not part of the framework source tree or Composer package |
 | Architecture documentation | Implemented | Current component/flow docs; diagrams describe current behavior |
-| CI | Workflow tracked; release changes not yet run in hosted CI | Latest prior run at `2183336` passed PHP 8.2/8.3, package-consumer, browser, and MySQL 8.4 jobs; this release's UI changes have local test coverage only |
+| CI | Workflow tracked; release changes not yet run in hosted CI | Latest prior run at `2183336` passed PHP 8.2/8.3, package-consumer, browser, and MySQL 8.4 jobs; this release's Tailwind and UI changes have local test coverage only |
 | Open-source governance | Partially prepared | Framework code is MIT-licensed and the root copyright notice names Morave Technologies, as confirmed by the maintainer. The separate extension declares `UNLICENSED`; private security reporting and branch protection need platform setup |
 | Project comparison | Scoped research documented | GitHub search surfaced Moroccan PHP community, integration package, and Laravel application examples; review is not exhaustive and supports no “first” claim |
 | AI integration | Planned | No provider/tool runtime exists |
@@ -34,15 +35,36 @@
 - `composer validate --strict`: **PASS**.
 - `composer audit`: **PASS**, no advisories reported.
 - `composer check`: **PASS**, including strict Composer validation, Composer
-  audit (no advisories), and **142 tests / 667 assertions; 4 SKIPPED**.
+  audit (no advisories), and **150 tests / 790 assertions; 4 SKIPPED**.
   Skips: filesystem permission semantics and symlink creation are unsupported
   in this process/platform, and two MySQL integration tests require a
   dedicated `NORA_TEST_DSN`.
-- PHP syntax checks over changed and new framework PHP files and
-  `node --check` over the reactive runtime and browser test: **PASS**; PHP
-  syntax was checked on 66 source, example, and test files.
-- `npm run test:browser`: **PASS**, four Playwright Chromium scenarios,
-  including generated applications, nested components, and the UI demo.
+- PHP syntax checks over `src`, `tests`, `bin`, and `examples`: **PASS**, 145
+  files; `node --check` for the runtime and three JavaScript tests: **PASS**.
+- `npm run test:tailwind`: **PASS**, Tailwind CSS v4.3.3 production build
+  contains responsive, hover, dark-mode, disabled, and ARIA-state utilities.
+- `npm audit`: **PASS**, zero vulnerabilities.
+- `npm run test:browser`: **PASS**, five Playwright Chromium scenarios,
+  including generated-app Composer VCS installation, PHPUnit, Tailwind build,
+  controller/view, reactive actions, nested components, the legacy UI demo,
+  and Tailwind dashboard. Used a temporary Composer home and isolated
+  HTTPS-only Git configuration because inherited host Git settings otherwise
+  attempted SSH authentication.
+- `php .github/scripts/verify-package-archive.php`: **PASS**, Composer archive
+  exclusion/dependency checks, isolated consumer install, autoload/bootstrap
+  route, runtime asset, and CLI smoke test.
+- `git diff --check`: **PASS**.
+- Rate-limit hardening: **PASS**, a focused regression test proves an
+  exhausted request returns 429 without running the route handler.
+- Composer MySQL driver requirement: **CHANGED**, `pdo_mysql` is now a
+  suggestion for MySQL/MariaDB applications rather than a package-wide
+  requirement in this worktree; the currently reachable remote branch still
+  requires it, and other PDO drivers remain unverified.
+- Authentication lifecycle: **PARTIALLY IMPLEMENTED**, unit tests cover
+  registration, verification, reset, replay/expiry behavior, and unverified
+  login rejection; an opt-in MySQL integration test requires the dedicated
+  loopback `nora_test` database. Mail delivery, HTTP endpoints, MFA, and
+  session revocation after password reset remain application/release work.
 - GitHub Actions at `2183336`: **PASS**, including both MySQL-backed PHP
   matrix jobs; it predates the UI changes documented here.
 - Independent security review: **NOT PERFORMED**; the planned review remains a
@@ -59,9 +81,14 @@
   history, automatic retries, persistent transport, and a formal browser
   support matrix are not provided. No automated accessibility scanner or
   independent security audit has been performed.
-- Generated project: the test runs `nora new`, installs its Composer path
-  dependency, serves it with PHP's development server, and drives the real
-  rendered page in Chromium.
+- Generated project: the browser acceptance scenario runs `nora new`, installs
+  Nora from the official VCS `dev-main` source and PHPUnit, executes the
+  generated `composer test`, builds CSS with its npm Tailwind script, and
+  serves the controller/view and reactive routes in Chromium. A clean remote
+  VCS install passed, and a fresh-clone consumer smoke test passed; the latest
+  direct browser-suite VCS resolution is blocked by this host's GitHub
+  authentication/SSH host-key settings. The dependency follows mutable
+  `dev-main`; no stable package release is available.
 - MySQL: **BLOCKED / UNVERIFIED**. `Test-NetConnection localhost -Port 3306`
   returned `TcpTestSucceeded: False`; no MySQL/MariaDB process was found.
   `tests/Integration/DatabaseServerTest.php` requires a dedicated test

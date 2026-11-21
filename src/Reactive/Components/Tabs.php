@@ -13,8 +13,19 @@ final class Tabs
     /**
      * @param list<array{id: string, label: string, content: SafeHtml, disabled?: bool}> $tabs
      */
-    public static function render(string $id, string $label, array $tabs, ?string $selected = null): SafeHtml
+    public static function render(
+        string $id,
+        string $label,
+        array $tabs,
+        ?string $selected = null,
+        array $attributes = [],
+    ): SafeHtml
     {
+        foreach (array_keys($attributes) as $name) {
+            if (!is_string($name) || strtolower($name) === 'data-nora-tabs') {
+                throw new InvalidArgumentException('Tab attributes cannot override the group protocol marker.');
+            }
+        }
         if (
             preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,63}$/D', $id) !== 1
             || $label === ''
@@ -83,6 +94,6 @@ final class Tabs
                     'hidden' => !$active,
                 ], $tab['content']);
             }, $tabs),
-        ]);
+        ])->withAttributes($attributes);
     }
 }

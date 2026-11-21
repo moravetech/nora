@@ -1,0 +1,6 @@
+@import "tailwindcss" source(none);
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@source "../../src";
+@source "../../examples/nora-tailwind-dashboard/src";

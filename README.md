@@ -1,5 +1,7 @@
 <p align="center">
   <img src="assets/brand/nora-logo.png" alt="Nora Framework — PHP-first reactive framework" width="420">
+  <img src="https://moraveholding.com/images/morave-logo-horizontal-navbar-120h.png" alt="Morave technologies" width="420">
+
 </p>
 
 # Nora Framework
@@ -24,7 +26,7 @@ name, logos, or branding to imply endorsement; see
 
 ## Project authority and community participation
 
-The project designates [`Yasser-devb/nora`](https://github.com/Yasser-devb/nora)
+The project designates [`moravetech/nora`](https://github.com/moravetech/nora)
 as the official Nora repository. Morave Technologies is identified as the
 project origin and maintainer. Community members may discuss proposals and
 submit changes through forks and pull requests under the
@@ -47,7 +49,8 @@ ownership. No CLA or copyright assignment is introduced.
 
 - PHP 8.2+ (the current CI matrix tests PHP 8.2 and 8.3)
 - Composer 2
-- `PDO` and `pdo_mysql` for the supported MySQL/MariaDB database baseline
+- Node.js 20+ and npm for Tailwind CSS builds and browser tests
+- `PDO` for database APIs; `pdo_mysql` only when using MySQL/MariaDB
 
 The Composer package is named `morave/nora` in the repository metadata and
 the code is licensed under [MIT](LICENSE). Packagist currently does not return
@@ -63,11 +66,14 @@ For source checkout testing only, an authorized user can configure Composer
 to use the Git repository directly:
 
 ```powershell
-composer config repositories.nora vcs https://github.com/Yasser-devb/nora.git
+composer config repositories.nora vcs https://github.com/moravetech/nora.git
 composer require morave/nora:dev-main
 ```
 
 This installs the current development branch, not a stable Packagist release.
+The currently reachable remote branch still declares `ext-pdo_mysql` as
+required, so source consumers need that PHP extension until the pending
+metadata correction is available upstream.
 The MIT license terms apply; see [LICENSE](LICENSE).
 
 The package maps `Nora\` to `src/` and registers `bin/nora` as a Composer
@@ -104,6 +110,13 @@ composer test -- --display-warnings
 
 The root [.env.example](.env.example) contains names and safe defaults only.
 Copy it to `.env` for local work; never commit secrets.
+Additional guides cover [installation](docs/INSTALLATION.md),
+[authentication](docs/AUTHENTICATION.md), [database APIs](docs/DATABASE.md),
+[migrations](docs/MIGRATIONS.md), [security boundaries](docs/SECURITY.md),
+and [upgrading](docs/UPGRADING.md). Current evidence, security findings, and
+release blockers are summarized in the
+[release-readiness report](docs/audit/RELEASE_READINESS.md) and
+[security findings record](docs/audit/SECURITY_FINDINGS.md).
 
 ## Create and run an application
 
@@ -111,14 +124,17 @@ Copy it to `.env` for local work; never commit secrets.
 php bin\nora new my-app
 cd my-app
 composer install
+npm install
+npm run nora:assets:build
 copy .env.example .env
-php ..\bin\nora serve
+composer exec nora -- serve
 ```
 
-`nora new` creates a project using a Composer path repository pointing to the
-Nora checkout that generated it. That repository path is machine-specific;
-change it before sharing the generated project. The PHP built-in server is for
-development only.
+`nora new` configures Composer to install Nora from the official Git
+repository's moving `dev-main` branch. This makes the generated project
+independent of the checkout that created it; it is not a stable release
+constraint, so review the release checklist before changing it to a tagged
+version. The PHP built-in server is for development only.
 
 The generated `public/index.php` uses `ApplicationBootstrap`, which loads
 `.env`, merges `config/app.php`, `config/{APP_ENV}.php`, and process environment
@@ -127,6 +143,63 @@ and runs the HTTP lifecycle. Process environment values take precedence over
 `.env`; environment-specific PHP config overrides base config; explicit
 environment values override both. A route registration closure can read the
 validated config through `$app->config()`.
+
+Generated projects place application PHP, the explicit route registry,
+reactive page components, and `.nora` templates under `src/`. `App\` maps to
+`src/` through Composer PSR-4 autoloading; there is no implicit route or class
+discovery. The starter includes a controller-rendered `/welcome` page and a
+reactive counter at `/`. Use `make:controller`, `make:middleware`,
+`make:service`, `make:component`, `make:view`, and `make:test` to add source
+files without overwriting existing ones. Services are manually instantiated
+plain PHP classes; Nora does not provide automatic service-container wiring.
+`make:model` creates a plain PHP class; it does not imply an ORM or database
+mapping. The generated PHPUnit feature test exercises `/welcome` and runs
+with `composer test`.
+
+New projects include Nora's official Tailwind CSS v4 integration. Their
+generated `resources/css/app.css` imports Tailwind and scans only `src/`,
+which includes PHP and `.nora` templates while excluding dependencies and
+generated output. The initializer for an existing app additionally scans
+`views/` and `templates/` by default; add or remove `@source` directives to
+match that app's actual source layout. The generated npm script
+`nora:assets:build` writes minified, same-origin CSS to
+`public/assets/app.css`; run `npm run nora:assets:dev` in a second terminal
+to rebuild while developing.
+
+The `tailwind:init` and `assets:*` CLI commands below are currently available
+in this repository checkout but have not yet landed on the reachable
+upstream `dev-main` branch. Generated apps use the npm scripts above and do
+not rely on those CLI commands.
+
+To add Tailwind to an existing Nora project without replacing existing npm
+scripts:
+
+```powershell
+composer exec nora -- tailwind:init
+npm install
+composer exec nora -- assets:dev
+```
+
+Use `composer exec nora -- assets:build` for production and
+`composer exec nora -- assets:check` to verify the source configuration and
+compiled stylesheet. The initializer adds Nora-namespaced npm scripts and
+Tailwind v4 development dependencies, and refuses to replace conflicting
+scripts or an existing CSS input. Commit the npm lockfile changes from
+`npm install`. Add `@source` directives in `resources/css/app.css` for any
+nonstandard PHP or template locations that contain class names. Keep utility
+class names statically discoverable; dynamically assembling fragments such as
+`"bg-" . $color` will not produce the complete utility set in production.
+
+The Nora integration targets Tailwind CSS v4 using its official CLI package;
+production CSS is compiled at build time, never from a CDN or in the browser.
+Existing Tailwind v3 applications can keep their existing official v3 CLI,
+`@tailwind base/components/utilities` input, `tailwind.config.js` content
+paths, and npm scripts. Mount the resulting same-origin stylesheet with the
+optional fifth `ReactiveEngine::mount()` argument; the Nora initializer and
+`assets:*` commands intentionally validate v4 configuration only. The default
+mount continues to serve Nora's legacy UI stylesheet for backwards
+compatibility. See the [Tailwind dashboard](examples/nora-tailwind-dashboard/README.md)
+and [Tailwind integration guide](docs/API_REFERENCE.md#tailwind-css-integration).
 
 The config files return arrays, for example:
 
@@ -245,7 +318,9 @@ attributes; legacy components that implement `ReactiveComponent` directly
 still return trusted PHP-authored markup.
 Read the [reactive engine specification](architecture/REACTIVE_UI_ENGINE.md)
 for the security model, form contract, and implemented/planned boundary.
-The [Nora UI integration demo](examples/nora-ui-demo/README.md) composes the
+The [Nora + Tailwind dashboard](examples/nora-tailwind-dashboard/README.md)
+demonstrates responsive layouts and server-side interactions using utility
+classes. The [legacy Nora UI integration demo](examples/nora-ui-demo/README.md) composes the
 documented layout, named slots, forms, searchable/sortable/paginated table,
 dialogs, tabs, dropdowns, and accessible feedback controls into a runnable
 page and exercises validation and authorized/denied actions. The component
@@ -315,9 +390,15 @@ form `_csrf` field. Do not apply browser CSRF assumptions indiscriminately to
 stateless APIs. Rate limiting is opt-in and file-backed; upload intake and
 private local storage are partial APIs requiring deployment-level limits and
 permissions. `PasswordLoginService` supports credential verification with an
-application-supplied account provider, password rehashing, and required
-rate-limiter configuration. Nora does not yet provide account persistence or
-a complete account lifecycle.
+application-supplied account provider, email-verification enforcement,
+password rehashing, and required rate-limiter configuration.
+`AccountLifecycleService` supplies registration, one-time email verification,
+and password-reset services behind application-owned storage and mail
+interfaces. An optional PDO/MySQL adapter and schema migration are available;
+live MySQL verification remains outstanding. Nora does not provide
+authentication controllers, email delivery, MFA, or automatic session
+revocation after password reset. See
+[authentication guidance](docs/AUTHENTICATION.md).
 
 ## CLI
 
@@ -326,21 +407,44 @@ php bin\nora --help
 php bin\nora --version
 php bin\nora make:controller User
 php bin\nora make:model User
+php bin\nora make:middleware RequestLog
+php bin\nora make:service ReportReader
+php bin\nora make:component StatusPanel
+php bin\nora make:view profile
+php bin\nora make:test Profile
 php bin\nora migrate:status
 php bin\nora migrate
 ```
 
-Generators validate names and refuse to overwrite files. `serve` starts PHP's
-development server. Database commands require an explicitly configured DSN;
-they fail rather than claim migrations succeeded when the database is
-unavailable.
+Generators validate names and refuse to overwrite files. Services are plain
+classes constructed by application code; there is no service container.
+Reactive components are page components under `src/Reactive`, not
+automatically discovered visual partials. `make:test` emits a PHPUnit
+feature test; generated projects add PHPUnit as a development dependency.
+`serve` starts PHP's development server. Database commands require an
+explicitly configured DSN; they fail rather than claim migrations succeeded
+when the database is unavailable.
+
+Run Tailwind setup/build commands from the Nora application directory with
+its Composer-installed CLI:
+
+```powershell
+php vendor\bin\nora tailwind:init
+npm install
+php vendor\bin\nora assets:dev
+php vendor\bin\nora assets:build
+php vendor\bin\nora assets:check
+```
 
 ## Tests and status
 
 `composer test` runs unit, integration, and security suites. The Playwright
 browser test separately exercises a clean generated app and its reactive
-round-trip. CI runs Composer validation, PHP syntax checks, the PHP suite on PHP 8.2 and
-8.3 with a disposable MySQL 8.4 service, and a Chromium reactive-browser job.
+round-trip. Run `npm run test:tailwind` to build production CSS and verify its
+utilities, and `npm run test:browser` for the generated-app and dashboard
+Chromium scenarios. CI runs Composer validation, PHP syntax checks, the PHP
+suite on PHP 8.2 and 8.3 with a disposable MySQL 8.4 service, and the Tailwind
+and Chromium checks.
 Local MySQL integration still requires a separately provisioned test database.
 Static analysis, benchmarks, and production web-server recipes are not yet
 configured or verified. See the transparent

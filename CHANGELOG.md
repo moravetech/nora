@@ -3,6 +3,29 @@
 All notable changes are recorded here. Follow the
 [release policy](RELEASE_POLICY.md) and keep entries factual.
 
+## Unreleased
+
+- Add a controller-rendered `/welcome` page, an escaped `.nora` view, and
+  production-safe default app configuration to new scaffolds.
+- Add `make:middleware` and `make:view` generators and verify generated
+  controller, middleware, view, and reactive component behavior.
+- Add `make:service` and `make:test`; generated projects include a PHPUnit
+  feature test for the controller-rendered welcome route.
+- Document current package distribution, authentication, database, migration,
+  security, and upgrade status without claiming unimplemented capabilities.
+- **Security (P2-03 mitigation):** add session-version support for account
+  session revocation. `SessionAuthenticator` validates session versions for
+  versioned accounts, and the built-in PDO account lifecycle reset flow now
+  bumps `session_version` to invalidate existing sessions after password reset.
+  Includes schema/migration updates for new installs and regression coverage.
+- **Security (P2-04 mitigation):** add ORM mass-assignment controls
+  (`$fillable`, `$guarded`, `forceFill()`, `isFillable()`/`isGuarded()`) with
+  backward-compatible default behavior and regression tests.
+- **CLI/DX:** add `php nora list` as a help alias for command discoverability.
+- **Release engineering:** add Phase 3 audit/test results, readiness report,
+  RC checklist, release notes draft, and migration guide under `docs/audit/`
+  and `docs/releases/`.
+
 ## v0.2.1 — 2026-10-28
 
 - Fix narrow-viewport overflow caused by intrinsic minimum sizing in page

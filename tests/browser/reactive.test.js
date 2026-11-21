@@ -28,6 +28,11 @@ test('generated app renders and securely updates its reactive counter without na
         const projectRoot = path.join(workspace, 'reactive-browser-app');
         fs.copyFileSync(path.join(projectRoot, '.env.example'), path.join(projectRoot, '.env'));
         installGeneratedDependencies(projectRoot);
+        const generatedCss = fs.readFileSync(
+            path.join(projectRoot, 'public', 'assets', 'app.css'),
+            'utf8',
+        );
+        assert.match(generatedCss, /\.text-4xl\b/, 'Tailwind must scan source-first .nora views');
 
         const port = await availablePort();
         server = spawn(
@@ -42,6 +47,12 @@ test('generated app renders and securely updates its reactive counter without na
 
         browser = await chromium.launch({ headless: true });
         const page = await browser.newPage();
+        const welcomeResponse = await page.request.get(`http://127.0.0.1:${port}/welcome`);
+        assert.equal(welcomeResponse.status(), 200, 'the generated controller route must load through Composer autoloading');
+        const welcomeHtml = await welcomeResponse.text();
+        assert.match(welcomeHtml, /Welcome to Nora/);
+        assert.match(welcomeHtml, /Your application code, routes, and views live in src\/\./);
+        assert.match(welcomeHtml, /href="\/assets\/app\.css"/);
         let mainFrameNavigations = 0;
         const actionRequests = [];
         const actionResponses = [];
@@ -64,7 +75,7 @@ test('generated app renders and securely updates its reactive counter without na
             if (response.url().endsWith('/_nora/runtime.js')) {
                 runtimeResponses.push(response.status());
             }
-            if (response.url().endsWith('/_nora/ui.css')) {
+            if (response.url().endsWith('/assets/app.css')) {
                 stylesheetResponses.push(response.status());
             }
         });
@@ -82,8 +93,12 @@ test('generated app renders and securely updates its reactive counter without na
         assert.deepEqual(await page.locator('output').allTextContents(), ['0', '0']);
         assert.equal(await page.locator('script[src="/_nora/runtime.js"]').count(), 1);
         assert.deepEqual(runtimeResponses, [200], 'the framework runtime must load automatically');
-        assert.deepEqual(stylesheetResponses, [200], 'the Nora UI stylesheet must load automatically');
-        assert.equal(await page.locator('.nora-button--primary').count(), 2);
+        assert.deepEqual(stylesheetResponses, [200], 'the compiled Tailwind stylesheet must load automatically');
+        assert.equal(await page.locator('.bg-indigo-600').count(), 2);
+        assert.equal(
+            await page.locator('[data-nora-key="primary"]').getAttribute('class'),
+            'text-indigo-700 dark:text-indigo-300',
+        );
         assert.equal(await page.locator('input').inputValue(), 'Keep my input');
         const dialog = page.locator('dialog#counter-help');
         await page.getByRole('button', { name: 'About' }).click();
@@ -123,6 +138,11 @@ test('generated app renders and securely updates its reactive counter without na
 
         await page.waitForFunction(() =>
             Array.from(document.querySelectorAll('output')).every(output => output.textContent === '1')
+        );
+        assert.equal(
+            await page.locator('[data-nora-key="primary"]').getAttribute('class'),
+            'text-emerald-700 dark:text-emerald-300',
+            'a server-rendered Tailwind class change must be reconciled',
         );
         assert.equal(mainFrameNavigations, 1, 'the reactive action must not navigate or reload the document');
         assert.deepEqual(actionRequests, ['POST']);
@@ -870,6 +890,21 @@ function waitForAction(page) {
 }
 
 function installGeneratedDependencies(projectRoot) {
+    const composerManifestPath = path.join(projectRoot, 'composer.json');
+    const composerManifest = JSON.parse(fs.readFileSync(composerManifestPath, 'utf8'));
+    composerManifest.repositories = [
+        {
+            type: 'path',
+            url: repositoryRoot.replace(/\\/g, '/'),
+            options: { symlink: true }
+        }
+    ];
+    composerManifest.require = {
+        ...(composerManifest.require || {}),
+        'morave/nora': '*@dev'
+    };
+    fs.writeFileSync(composerManifestPath, JSON.stringify(composerManifest, null, 4) + '\n', 'utf8');
+
     const composer = process.env.COMPOSER_BINARY || 'composer';
     const args = ['install', '--no-interaction', '--prefer-dist'];
     if (process.platform === 'win32') {
@@ -877,10 +912,38 @@ function installGeneratedDependencies(projectRoot) {
             cwd: projectRoot,
             stdio: 'pipe'
         });
-        return;
+    } else {
+        execFileSync(composer, args, { cwd: projectRoot, stdio: 'pipe' });
+    }
+    if (process.platform === 'win32') {
+        execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `${composer} test`], {
+            cwd: projectRoot,
+            stdio: 'pipe'
+        });
+    } else {
+        execFileSync(composer, ['test'], { cwd: projectRoot, stdio: 'pipe' });
     }
 
-    execFileSync(composer, args, { cwd: projectRoot, stdio: 'pipe' });
+    const npm = process.env.NPM_BINARY || 'npm';
+    const npmArguments = ['install', '--no-audit', '--no-fund'];
+    if (process.platform === 'win32') {
+        execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', `${npm} ${npmArguments.join(' ')}`], {
+            cwd: projectRoot,
+            stdio: 'pipe'
+        });
+    } else {
+        execFileSync(npm, npmArguments, { cwd: projectRoot, stdio: 'pipe' });
+    }
+    const npmBuild = ['run', 'nora:assets:build'];
+    if (process.platform === 'win32') {
+        execFileSync(process.env.ComSpec || 'cmd.exe', [
+            '/d',
+            '/c',
+            `${npm} ${npmBuild.join(' ')}`
+        ], { cwd: projectRoot, stdio: 'pipe' });
+    } else {
+        execFileSync(npm, npmBuild, { cwd: projectRoot, stdio: 'pipe' });
+    }
 }
 
 async function waitForServer(url, server, output) {

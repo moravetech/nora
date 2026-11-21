@@ -22,6 +22,7 @@ final class Table
         iterable $rows,
         callable $key,
         callable $cells,
+        array $attributes = [],
     ): SafeHtml {
         $resolved = Props::resolve([
             'caption' => ['type' => 'string'],
@@ -88,6 +89,6 @@ final class Table
                 $headers,
             ))),
             UI::element('tbody', [], $body),
-        ]));
+        ])->withAttributes($attributes));
     }
 }

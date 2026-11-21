@@ -138,15 +138,21 @@ final class RateLimitTest extends TestCase
     public function testMiddlewareReturns429AndRetryMetadataWhenBucketIsExhausted(): void
     {
         $app = new Application();
+        $handledRequests = 0;
         $app->middleware(new RateLimitMiddleware(
             $this->limiter(1, 60, 120),
             static fn (Request $request): string => 'route:login',
         ));
-        $app->route('POST', '/login', static fn (): Response => Response::text('processed'));
+        $app->route('POST', '/login', static function () use (&$handledRequests): Response {
+            $handledRequests++;
+
+            return Response::text('processed');
+        });
 
         $app->handle(Request::fromUri('POST', '/login'));
         $response = $app->handle(Request::fromUri('POST', '/login'));
 
+        self::assertSame(1, $handledRequests, 'Requests over the limit must not execute the handler.');
         self::assertSame(429, $response->status());
         self::assertSame('Too Many Requests', $response->body());
         self::assertSame('1', $response->headers()['RateLimit-Limit']);
@@ -229,8 +235,9 @@ final class RateLimitTest extends TestCase
         $limiter = new RateLimiter($store, 2, 60, static fn (): int => 120);
         $limiter->consume('route:login');
 
-        if (!@chmod($directory, 0500)) {
-            self::markTestSkipped('The current platform does not allow changing directory permissions.');
+        $restriction = $this->restrictDirectoryWrites($directory);
+        if ($restriction === null) {
+            self::markTestSkipped('The current platform does not allow restricting directory write permissions in this environment.');
         }
 
         try {
@@ -241,11 +248,14 @@ final class RateLimitTest extends TestCase
             ));
             $response = $app->handle(Request::fromUri('POST', '/login'));
         } finally {
-            @chmod($directory, 0700);
+            $this->restoreDirectoryPermissions($directory, $restriction);
         }
 
         if ($response->status() !== 503) {
-            self::markTestSkipped('The current process can still write through the changed directory permissions.');
+            self::markTestSkipped(
+                'Platform limitation: the current process/environment can still write despite applied permission restrictions; '
+                . 'fail-closed-on-unwritable-storage behavior could not be enforced and verified here.',
+            );
         }
         self::assertSame('Service Unavailable', $response->body());
     }
@@ -282,7 +292,10 @@ final class RateLimitTest extends TestCase
             . '.json';
         try {
             if (!@symlink($outsideFile, $linkPath)) {
-                self::markTestSkipped('The current platform does not permit creating symbolic links.');
+                self::markTestSkipped(
+                    'Platform/privilege limitation: symbolic link creation is not permitted in this environment '
+                    . '(on Windows this typically requires Developer Mode or elevated SeCreateSymbolicLinkPrivilege).',
+                );
             }
 
             self::assertSame(0, $store->cleanup(PHP_INT_MAX));
@@ -310,6 +323,110 @@ final class RateLimitTest extends TestCase
             . '.json';
         self::assertFileExists($path);
         self::assertStringNotContainsString('sensitive:account-identifier', file_get_contents($path));
+    }
+
+    public function testStorageDirectorySymlinkIsRejectedWhenSymlinksAreSupported(): void
+    {
+        $realDirectory = $this->directory();
+        self::assertTrue(mkdir($realDirectory, 0700, true) || is_dir($realDirectory));
+        $linkPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'nora-rate-dir-link-' . bin2hex(random_bytes(8));
+        $this->directories[] = $linkPath;
+
+        if (!@symlink($realDirectory, $linkPath)) {
+            self::markTestSkipped(
+                'Platform/privilege limitation: symbolic link creation is not permitted in this environment.',
+            );
+        }
+
+        $this->expectException(RateLimitStorageException::class);
+        new FileRateLimitStore($linkPath);
+    }
+
+    public function testLockFileSymlinkFailsClosed(): void
+    {
+        $directory = $this->directory();
+        $store = new FileRateLimitStore($directory);
+        $limiter = new RateLimiter($store, 1, 60, static fn (): int => 120);
+        $outsideFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'nora-rate-lock-target-' . bin2hex(random_bytes(8));
+        file_put_contents($outsideFile, 'keep');
+        $this->directories[] = $outsideFile;
+        $lockPath = $directory . DIRECTORY_SEPARATOR . 'limiter.lock';
+
+        if (!@symlink($outsideFile, $lockPath)) {
+            self::markTestSkipped(
+                'Platform/privilege limitation: symbolic link creation is not permitted in this environment.',
+            );
+        }
+
+        $app = new Application();
+        $app->middleware(new RateLimitMiddleware($limiter, static fn (Request $request): string => 'route:login'));
+        $response = $app->handle(Request::fromUri('POST', '/login'));
+
+        self::assertSame(503, $response->status());
+        self::assertSame('Service Unavailable', $response->body());
+        self::assertSame('keep', file_get_contents($outsideFile));
+    }
+
+    public function testBucketFileSymlinkFailsClosed(): void
+    {
+        $directory = $this->directory();
+        $store = new FileRateLimitStore($directory);
+        $limiter = new RateLimiter($store, 1, 60, static fn (): int => 120);
+        $outsideFile = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'nora-rate-bucket-target-' . bin2hex(random_bytes(8));
+        file_put_contents($outsideFile, 'keep');
+        $this->directories[] = $outsideFile;
+        $bucketPath = $directory . DIRECTORY_SEPARATOR . 'bucket-' . hash('sha256', 'route:login') . '.json';
+
+        if (!@symlink($outsideFile, $bucketPath)) {
+            self::markTestSkipped(
+                'Platform/privilege limitation: symbolic link creation is not permitted in this environment.',
+            );
+        }
+
+        $app = new Application();
+        $app->middleware(new RateLimitMiddleware($limiter, static fn (Request $request): string => 'route:login'));
+        $response = $app->handle(Request::fromUri('POST', '/login'));
+
+        self::assertSame(503, $response->status());
+        self::assertSame('Service Unavailable', $response->body());
+        self::assertSame('keep', file_get_contents($outsideFile));
+    }
+
+    public function testMiddlewareFailsClosedWithGeneric503OnInvalidBucketStructure(): void
+    {
+        $directory = $this->directory();
+        $store = new FileRateLimitStore($directory);
+        $limiter = new RateLimiter($store, 1, 60, static fn (): int => 120);
+        $bucketPath = $directory . DIRECTORY_SEPARATOR . 'bucket-' . hash('sha256', 'route:login') . '.json';
+        file_put_contents($bucketPath, json_encode(['window_start' => 0, 'reset_at' => 60, 'count' => 0], JSON_THROW_ON_ERROR));
+
+        $app = new Application();
+        $app->middleware(new RateLimitMiddleware($limiter, static fn (Request $request): string => 'route:login'));
+        $response = $app->handle(Request::fromUri('POST', '/login'));
+
+        self::assertSame(503, $response->status());
+        self::assertSame('Service Unavailable', $response->body());
+        self::assertStringNotContainsString($directory, $response->body());
+    }
+
+    public function testCleanupRemovesOnlyExpiredAbandonedTemporaryFiles(): void
+    {
+        $directory = $this->directory();
+        $store = new FileRateLimitStore($directory);
+        $now = 200_000;
+        $oldTemp = $directory . DIRECTORY_SEPARATOR . '.nora-rate-' . str_repeat('a', 32) . '.tmp';
+        $recentTemp = $directory . DIRECTORY_SEPARATOR . '.nora-rate-' . str_repeat('b', 32) . '.tmp';
+        $invalidTemp = $directory . DIRECTORY_SEPARATOR . '.nora-rate-not-a-valid-name.tmp';
+        file_put_contents($oldTemp, 'old');
+        file_put_contents($recentTemp, 'recent');
+        file_put_contents($invalidTemp, 'keep');
+        touch($oldTemp, $now - 86_401);
+        touch($recentTemp, $now - 100);
+
+        self::assertSame(0, $store->cleanup($now));
+        self::assertFileDoesNotExist($oldTemp);
+        self::assertFileExists($recentTemp);
+        self::assertFileExists($invalidTemp);
     }
 
     public function testConcurrentProcessUpdatesAreAtomicWhenProcessControlIsAvailable(): void
@@ -391,5 +508,60 @@ final class RateLimitTest extends TestCase
         $this->directories[] = $directory;
 
         return $directory;
+    }
+
+    /**
+     * @return array{mode: 'chmod', previous: int}|array{mode: 'icacls', user: string}|null
+     */
+    private function restrictDirectoryWrites(string $directory): ?array
+    {
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            $previous = @fileperms($directory);
+            if ($previous === false || !@chmod($directory, 0500)) {
+                return null;
+            }
+
+            return ['mode' => 'chmod', 'previous' => $previous & 0777];
+        }
+
+        @chmod($directory, 0500);
+        $user = getenv('USERNAME');
+        if (!is_string($user) || $user === '' || !function_exists('exec')) {
+            return null;
+        }
+
+        $command = 'icacls ' . escapeshellarg($directory) . ' /deny ' . escapeshellarg($user . ':(W,WDAC,WO,DC)') . ' 2>&1';
+        $output = [];
+        $exitCode = 1;
+        @exec($command, $output, $exitCode);
+        if ($exitCode !== 0) {
+            return null;
+        }
+
+        return ['mode' => 'icacls', 'user' => $user];
+    }
+
+    /**
+     * @param array{mode: 'chmod', previous: int}|array{mode: 'icacls', user: string} $restriction
+     */
+    private function restoreDirectoryPermissions(string $directory, array $restriction): void
+    {
+        if ($restriction['mode'] === 'chmod') {
+            @chmod($directory, $restriction['previous'] ?: 0700);
+
+            return;
+        }
+
+        if (DIRECTORY_SEPARATOR === '\\' && function_exists('exec')) {
+            $output = [];
+            $exitCode = 1;
+            @exec(
+                'icacls ' . escapeshellarg($directory) . ' /remove:d ' . escapeshellarg($restriction['user']) . ' 2>&1',
+                $output,
+                $exitCode,
+            );
+            @exec('icacls ' . escapeshellarg($directory) . ' /reset 2>&1');
+        }
+        @chmod($directory, 0700);
     }
 }

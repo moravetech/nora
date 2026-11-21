@@ -104,6 +104,82 @@ final class MigrationRunner
         return $completed;
     }
 
+    /**
+     * Roll back applied migrations and return their identifiers.
+     *
+     * When $steps is null, rolls back the last batch. When $steps is provided,
+     * rolls back that many most-recently applied migrations.
+     *
+     * @return list<string>
+     */
+    public function rollback(?int $steps = null): array
+    {
+        if ($steps !== null && $steps < 1) {
+            throw new \InvalidArgumentException('Rollback steps must be at least 1.');
+        }
+
+        $this->ensureRepository();
+        $files = $this->migrationFiles();
+
+        $statement = $this->pdo->query(
+            'SELECT migration, batch FROM ' . self::TABLE . ' ORDER BY batch DESC, migration DESC',
+        );
+        if ($statement === false) {
+            throw new DatabaseException('Unable to read applied migrations.');
+        }
+        /** @var list<array{migration: string, batch: int|string}> $rows */
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+        if ($rows === []) {
+            return [];
+        }
+
+        $lastBatch = (int) $rows[0]['batch'];
+        $targets = [];
+        foreach ($rows as $row) {
+            $batch = (int) $row['batch'];
+            if ($steps === null) {
+                if ($batch !== $lastBatch) {
+                    break;
+                }
+            } elseif (count($targets) >= $steps) {
+                break;
+            }
+            $targets[] = ['migration' => (string) $row['migration'], 'batch' => $batch];
+        }
+
+        $rolledBack = [];
+        foreach ($targets as $target) {
+            $name = $target['migration'];
+            if (!isset($files[$name])) {
+                throw new RuntimeException('Cannot roll back missing migration file: ' . $name . '.php');
+            }
+
+            $migration = $this->loadMigration($files[$name]);
+            if ($this->transactionalMigrations) {
+                $this->pdo->beginTransaction();
+            }
+            try {
+                $migration->down($this->pdo);
+                $delete = $this->pdo->prepare('DELETE FROM ' . self::TABLE . ' WHERE migration = :migration');
+                if ($delete === false) {
+                    throw new DatabaseException('Unable to prepare migration rollback update.');
+                }
+                $delete->execute(['migration' => $name]);
+                if ($this->transactionalMigrations) {
+                    $this->pdo->commit();
+                }
+                $rolledBack[] = $name;
+            } catch (Throwable $exception) {
+                if ($this->transactionalMigrations && $this->pdo->inTransaction()) {
+                    $this->pdo->rollBack();
+                }
+                throw $exception;
+            }
+        }
+
+        return $rolledBack;
+    }
+
     private function ensureRepository(): void
     {
         $this->pdo->exec(

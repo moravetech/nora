@@ -167,6 +167,9 @@ bound in deterministic order (INSERT/UPDATE values first, then predicates).
 `PdoConnection::select()` executes SELECT builders and
 `PdoConnection::executeBuilder()` executes mutation builders, returning PDO's
 driver-dependent affected-row count. Bound values use prepared statements.
+The package requires PDO but does not require a particular PDO driver for
+applications that do not use database features. MySQL/MariaDB applications
+also need `pdo_mysql`; other PDO drivers have not been independently verified.
 Live MySQL/MariaDB operation still needs environment-backed integration testing; see
 [database architecture](../architecture/DATABASE_ARCHITECTURE.md).
 
@@ -237,8 +240,9 @@ does not infer client IP keys.
 
 The response includes `RateLimit-Limit`, `RateLimit-Remaining`, and
 `RateLimit-Reset` (seconds until the fixed window ends). Exhausted requests
-receive 429 with `Retry-After` in seconds. A store failure fails closed with a
-generic 503; there is no implicit fail-open option.
+receive 429 with `Retry-After` in seconds without invoking the downstream
+handler. A store failure fails closed with a generic 503; there is no implicit
+fail-open option.
 
 The storage directory contains hashed bucket state and a persistent lock file.
 On Unix-like systems Nora requests owner-only directory/file permissions; on
@@ -250,6 +254,86 @@ host, or a shared filesystem only after its `flock` semantics have been
 verified. It is not a distributed limiter. Application rate limiting does not
 replace reverse-proxy, web-server, network, or resource-level DoS controls.
 
+## Tailwind CSS integration
+
+Nora's first-party integration targets Tailwind CSS v4 through the official
+`tailwindcss` and `@tailwindcss/cli` npm packages. New projects include the
+packages and `resources/css/app.css`; existing projects can initialize with
+`php vendor/bin/nora tailwind:init`. The initializer adds namespaced scripts
+and dependencies while preserving existing npm configuration, and refuses to
+overwrite an existing CSS input or conflicting script. Run `npm install`
+after initialization.
+
+```powershell
+php vendor\bin\nora assets:dev
+php vendor\bin\nora assets:build
+php vendor\bin\nora assets:check
+```
+
+`assets:dev` watches source files; `assets:build` creates minified
+`public/assets/app.css`; `assets:check` validates the Tailwind configuration
+and that a CSS build exists. New scaffolds scan only `src/`, including PHP
+classes and `.nora` templates; `tailwind:init` for existing projects also
+scans `views/` and `templates/`. Neither setup scans `vendor/`,
+`node_modules/`, or generated output. Add `@source` directives for other
+directories containing class names. Keep class names statically detectable;
+dynamic fragments such as `'bg-' . $color` cannot guarantee production CSS
+generation.
+
+Mounted pages use Nora's legacy stylesheet by default for backwards
+compatibility. Pass a same-origin path as the fifth `mount()` argument to use
+compiled application CSS, or `null` to omit the Nora stylesheet:
+
+```php
+$engine->mount($app, 'dashboard', '/', 'Dashboard', '/assets/app.css');
+```
+
+No CDN or runtime compiler is used. The maintained Nora initializer and
+`assets:*` commands target Tailwind v4. Existing Tailwind v3 applications can
+retain their official v3 CLI, `@tailwind base/components/utilities` input,
+`tailwind.config.js` `content` paths, and npm scripts, then pass the compiled
+same-origin CSS path to `mount()`. Nora does not rewrite or validate v3
+configuration.
+
+Tailwind's built-in responsive, pseudo-state, ARIA, arbitrary-value, and
+dark-mode variants work with Nora-rendered HTML. Customize tokens with v4's
+`@theme` directives in the application CSS. The generated input configures a
+class-driven `dark:` variant; the dashboard demonstrates responsive layouts,
+validation states, and a reactive theme toggle.
+
+When a production class is missing, verify that its full class name appears
+literally in a scanned PHP/template source, that the file's directory has an
+`@source` directive relative to `resources/css/app.css`, and that
+`assets:build` ran after the source change. Then run `assets:check` and inspect
+`public/assets/app.css`. Avoid scanning generated bundles or dependencies to
+paper over a missing application source path.
+
+HTML composition accepts standard classes and supported attributes directly:
+
+```php
+use Nora\Reactive\Components\Button;
+use Nora\Reactive\UI;
+
+$save = Button::render([], 'Save', [
+    'class' => 'rounded-lg px-4 py-2 hover:bg-indigo-700',
+    'aria-label' => 'Save profile',
+]);
+$field = UI::element('input', [
+    'class' => 'w-full focus:ring-2',
+    'aria-describedby' => 'email-help',
+    'autocomplete' => 'email',
+]);
+```
+
+Classes are appended to built-in component classes rather than replacing
+protocol/semantic attributes. Attribute names and values are validated and
+escaped by `SafeHtml`; event-handler, inline-style, and unsafe URL attributes
+remain rejected.
+The optional attribute bag targets the rendered button, card root, modal
+dialog, tabs group, dropdown disclosure, or table element; each component
+protects its Nora runtime markers from being overridden. Use `UI::element()`
+when a component needs fully custom nested markup.
+
 ## Reactive UI (experimental; API is unstable)
 
 | API | Purpose |
@@ -259,7 +343,7 @@ replace reverse-proxy, web-server, network, or resource-level DoS controls.
 | `Nora\Reactive\ReactiveNestedComponentInterface` | Define child props rules, independent state, rendering, actions, and recursive children. |
 | `Nora\Reactive\ReactiveComponentLifecycleInterface` | Receive mount and disposal callbacks for nested child instances. |
 | `Nora\Reactive\ReactiveAction` | Declare argument rules, a state transition, and an optional authorization callback; missing authorization denies by default. Use `ReactiveAction::publicAction(...)` to intentionally declare an action public to a valid page holder. |
-| `Nora\Reactive\ReactiveEngine` | Register page components, install session/action/runtime routes, and mount a server-rendered page with an optional escaped document title. |
+| `Nora\Reactive\ReactiveEngine` | Register page components, install session/action/runtime routes, and mount a server-rendered page with an optional escaped document title and same-origin stylesheet path. |
 | `Nora\Reactive\Component` | Implement the existing page-component contract with a safe `view(State): SafeHtml` method while keeping state transitions explicit. |
 | `Nora\Reactive\State` | Read a render-time state snapshot with dot-path lookup and compute derived values without mutating server state. |
 | `Nora\Reactive\UI` / `SafeHtml` | Compose escaped text, HTML elements, fragments, conditions, keyed collections, and action buttons. |
@@ -300,7 +384,9 @@ $engine->mount($app, 'counter', '/', 'Counter demo');
 ```
 
 The fourth `mount()` argument is an optional document title; it defaults to
-`Nora` and is HTML-escaped by the framework.
+`Nora` and is HTML-escaped by the framework. The optional fifth argument
+selects a validated same-origin stylesheet path; it defaults to Nora's
+`/_nora/ui.css` for compatibility, or accepts `null` to omit that stylesheet.
 
 `ReactiveComponent` supplies `initialState(): array`, `render(array $state):
 string`, and `actions(): array`. Each `ReactiveAction` receives argument
@@ -411,11 +497,11 @@ and messages are escaped.
 
 | Component | Signature and supported options |
 |---|---|
-| `Button` | `Button::render($props, $label, $attributes = [], ?Slots $slots = null)`. Variants: `primary`, `secondary`, `outline`, `ghost`, `link`, `danger`; sizes: `small`, `medium`, `large`. `disabled` and `loading` default to false; loading disables the button and announces `aria-busy`. `type` defaults to `button`; `action` and string-keyed `arguments` bind only to a registered server action. Optional `leading-icon` and `trailing-icon` slots are decorative. |
+| `Button` | `Button::render($props, $label, $attributes = [], ?Slots $slots = null)`. Variants: `primary`, `secondary`, `outline`, `ghost`, `link`, `danger`; sizes: `small`, `medium`, `large`. `disabled` and `loading` default to false; loading disables the button and announces `aria-busy`. `type` defaults to `button`; `action` and string-keyed `arguments` bind only to a registered server action. The attributes argument accepts `class` and supported HTML/ARIA/data attributes; user classes are appended to the component's base classes. Optional `leading-icon` and `trailing-icon` slots are decorative. |
 | `Alert` | `Alert::render($props, Slots $slots)`. `variant`: `info`, `success`, `warning`, `danger`, or `error`; `label` defaults to `Notice`; `dismissible` defaults to false. Optional `title`, `icon`, and `default` slots. Dismissal is client-only. |
-| `Card` | `Card::render($props, Slots $slots)`. `as` defaults to `section` (`article` and `div` are also accepted); optional `labelled_by`, `title`, and `description` props. Slots: `header`, `default`, `actions`, and `footer`. Missing slots render empty. |
+| `Card` | `Card::render($props, Slots $slots, $attributes = [])`. `as` defaults to `section` (`article` and `div` are also accepted); optional `labelled_by`, `title`, and `description` props. The optional attribute bag forwards supported HTML/ARIA/data attributes to the card root and appends user classes. Slots: `header`, `default`, `actions`, and `footer`. Missing slots render empty. |
 | `Field` | `Field::render($props, SafeHtml $control, $errors = [])`. Requires `name` and `label`; optional `required`, `hint`; errors are escaped and associated with the control. Supply a real labelable input, select, or textarea. |
-| `ReactiveForm` | `ReactiveForm::render($props, SafeHtml $children, $attributes = [])`. Requires `action_name`; `action_url` defaults to `#`; `success_message` is optional. Bind controls with matching `name` and `data-nora-field`; the action schema remains authoritative. |
+| `ReactiveForm` | `ReactiveForm::render($props, SafeHtml $children, $attributes = [])`. Requires `action_name`; `action_url` defaults to `#`; `success_message` is optional. The attribute bag forwards supported HTML/ARIA/data attributes, including Tailwind `class`. Bind controls with matching `name` and `data-nora-field`; the action schema remains authoritative. |
 | `Select` | `Select::render($props, $options)`. Requires `name` and `label`; optional `value`, `placeholder` (`Choose an option`), `required`, and `disabled`. Each option has a unique non-empty string `value`, non-empty string `label`, and optional boolean `disabled`. A non-empty selected value must match an option. |
 | `Checkbox` | `Checkbox::render($props)`. Requires `name` and `label`; optional `hint`, `checked`, `required`, and `disabled` (booleans default false). |
 | `RadioGroup` | `RadioGroup::render($props, $options)`. Requires `name`, `label`, and a non-empty options list; optional `value`, `hint`, `required`, and `disabled`. Option values are unique non-empty strings; labels are non-empty strings; option `disabled` is boolean. Outputs a labeled `fieldset` and `legend`. |
@@ -425,8 +511,8 @@ and messages are escaped.
 | `DataTable` | `DataTable::render($props, iterable $rows, callable $key, callable $cells)`. Requires `columns` (unique `key` and non-empty `label`) and `caption`; optional `query`, `sort`, `direction` (`asc` or `desc`), `page` (1), `per_page` (5), `sort_action`, `page_action`, `action_arguments`, and `empty_message`. Search and sorting use raw scalar row fields named by the columns; callbacks render the visible cells. Paging happens after in-memory search/sort. Use a database query for large or unbounded datasets rather than materializing them in this helper. |
 | `SearchField` | `SearchField::render($props)`. `name` defaults to `query`, `label` to `Search`, `value` to empty text, and `placeholder` to `Search records`. The clear button clears locally; submitting still requires a form/action integration. |
 | `Pagination` | `Pagination::render($props, $baseArguments = [])`. Requires integer `current` and `total`; optional `action`, `page_argument` (`page`), and accessible `label` (`Pagination`). With `action`, emits reactive buttons with base arguments; without it, emits ordinary page links. |
-| `Modal` | `Modal::render($props, SafeHtml $content)`. Requires a unique safe `id` and non-empty `title`; `trigger` and `close_label` default to `Open dialog` and `Close dialog`; `description` is optional; `open` defaults false; `close_action` optionally synchronizes browser close/Escape events with a registered server action. Uses native `<dialog>`. |
-| `Tabs` | `Tabs::render($id, $label, $tabs, $selected = null)`. Each tab needs a unique safe `id`, non-empty `label`, and `SafeHtml` content; optional boolean `disabled`. The first enabled tab is selected by default. Arrow/Home/End keyboard operation skips disabled tabs. |
+| `Modal` | `Modal::render($props, SafeHtml $content, $attributes = [])`. Requires a unique safe `id` and non-empty `title`; `trigger` and `close_label` default to `Open dialog` and `Close dialog`; `description` is optional; `open` defaults false; `close_action` optionally synchronizes browser close/Escape events with a registered server action. The optional attribute bag is forwarded to the native `<dialog>` root. |
+| `Tabs` | `Tabs::render($id, $label, $tabs, $selected = null, $attributes = [])`. Each tab needs a unique safe `id`, non-empty `label`, and `SafeHtml` content; optional boolean `disabled`. The first enabled tab is selected by default. The optional attribute bag is forwarded to the tab-group root. Arrow/Home/End keyboard operation skips disabled tabs. |
 | `Dropdown` | `Dropdown::render($props, SafeHtml $items)`. Requires non-empty accessible `label`; uses native `<details>/<summary>` and closes on Escape or outside click. Menu content is developer-supplied safe markup. |
 | `Accordion` | `Accordion::render($label, $items, $multiple = true)`. Each item has a unique safe `id`, non-empty `title`, `SafeHtml content`, and optional boolean `open`. Uses native `<details>/<summary>`; `multiple: false` groups disclosures by name. |
 | `Badge` | `Badge::render($props, string\|SafeHtml $label, ?SafeHtml $icon = null)`. `variant` defaults to `neutral` (`neutral`, `primary`, `success`, `warning`, `danger`, `info`); optional boolean `dot`. |
@@ -523,9 +609,19 @@ Messages are inserted as text, not markup. While a request is in flight,
 preserved through successful DOM reconciliation. Do not include passwords,
 tokens, or other secrets in rendered state or action responses.
 
-The CLI provides `php bin\nora make:component Alert`, which creates a
-`src/Reactive/Alert.php` component using the composable base API. It validates
-the class name and refuses to overwrite an existing file.
+The CLI provides `make:controller`, `make:model`, `make:middleware`,
+`make:service`, `make:component`, `make:view`, and `make:test` generators.
+Controllers and middleware implement Nora's actual route-handler and
+middleware contracts; `.nora` views are generated under `src/Views` and use
+the `TemplateRenderer`'s escaped interpolation. `make:model` generates a
+plain PHP class and does not imply an ORM contract. Services are plain
+manually instantiated classes; Nora provides no automatic service container.
+The component generator creates a `src/Reactive/Alert.php` reactive page
+component using the composable base API. `make:test` creates a PHPUnit feature
+test under `tests/Feature`; generated applications include PHPUnit as a dev
+dependency. Generated source files refuse to overwrite existing files.
+Register routes and middleware explicitly in `src/routes.php`; there is no
+class discovery.
 
 The form still has ordinary `method` and `action` attributes. If JavaScript is
 disabled, the browser submits a normal POST to that application route; the

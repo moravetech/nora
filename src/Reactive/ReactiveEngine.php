@@ -89,6 +89,7 @@ final class ReactiveEngine
         string $componentName,
         string $path,
         string $documentTitle = 'Nora',
+        ?string $stylesheetPath = self::STYLESHEET_PATH,
     ): void
     {
         if (
@@ -97,12 +98,22 @@ final class ReactiveEngine
         ) {
             throw new \InvalidArgumentException('The reactive component is not registered.');
         }
+        if (
+            $stylesheetPath !== null
+            && (
+                preg_match('/^\/(?!\/)[A-Za-z0-9._\/-]+$/D', $stylesheetPath) !== 1
+                || str_contains($stylesheetPath, '..')
+                || str_contains($stylesheetPath, '//')
+            )
+        ) {
+            throw new \InvalidArgumentException('A reactive stylesheet must use a safe same-origin path.');
+        }
         $this->install($application);
 
         $application->route(
             'GET',
             $path,
-            fn (): Response => $this->createPageResponse($componentName, $documentTitle),
+            fn (): Response => $this->createPageResponse($componentName, $documentTitle, $stylesheetPath),
         );
     }
 
@@ -119,7 +130,11 @@ final class ReactiveEngine
         $this->installed = true;
     }
 
-    private function createPageResponse(string $componentName, string $documentTitle): Response
+    private function createPageResponse(
+        string $componentName,
+        string $documentTitle,
+        ?string $stylesheetPath,
+    ): Response
     {
         $pages = $this->pages();
         if (count($pages) >= self::MAX_PAGES_PER_SESSION) {
@@ -151,7 +166,9 @@ final class ReactiveEngine
             . '<meta name="nora-csrf" content="' . $csrfToken . '"><title>'
             . htmlspecialchars($documentTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
             . '</title>'
-            . '<link rel="stylesheet" href="' . self::STYLESHEET_PATH . '">'
+            . ($stylesheetPath === null
+                ? ''
+                : '<link rel="stylesheet" href="' . htmlspecialchars($stylesheetPath, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">')
             . '<script defer src="' . self::RUNTIME_PATH . '"></script></head><body>'
             . $this->pageRoot($pageId, $revision, $content)
             . '</body></html>';

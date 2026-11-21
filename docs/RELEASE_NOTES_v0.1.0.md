@@ -27,7 +27,8 @@ database, security, and template APIs.
 ## Requirements and installation
 
 - PHP 8.2 or newer and Composer 2.
-- PDO with `pdo_mysql` for the supported MySQL/MariaDB baseline.
+- PDO for database APIs; `pdo_mysql` is optional and required only for
+  MySQL/MariaDB integration.
 
 The framework's first version is proposed as `v0.1.0`. The Composer package
 name is `morave/nora`; no Packagist release or public stable installation has

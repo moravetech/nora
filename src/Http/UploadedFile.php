@@ -20,9 +20,12 @@ final readonly class UploadedFile
     /**
      * Create an upload from one entry in PHP's $_FILES array.
      *
+     * Real HTTP uploads must pass PHP's uploaded-file check. Tests or trusted
+     * local fixtures may opt into non-uploaded temporary files explicitly.
+     *
      * @param array<string, mixed> $file
      */
-    public static function fromPhpArray(array $file): self
+    public static function fromPhpArray(array $file, bool $allowNonUploadedTempFile = false): self
     {
         $name = $file['name'] ?? null;
         $temporaryPath = $file['tmp_name'] ?? null;
@@ -46,6 +49,9 @@ final readonly class UploadedFile
         }
         if (!is_string($temporaryPath) || $temporaryPath === '' || !is_int($size)) {
             throw new UploadException('The uploaded file metadata is invalid.');
+        }
+        if (!$allowNonUploadedTempFile && !is_uploaded_file($temporaryPath)) {
+            throw new UploadException('The uploaded temporary file is unavailable.');
         }
         if (
             $size < 0

@@ -18,21 +18,29 @@ From the Nora checkout, run:
 php bin\nora new hello-nora
 cd hello-nora
 composer install
+npm install
 copy .env.example .env
+composer test
+npm run nora:assets:build
 ```
 
 In a POSIX shell, the equivalent CLI path is `php bin/nora new hello-nora`;
 copy the environment example with `cp .env.example .env`.
 
-The generated project points to the local framework checkout using a Composer
-path repository. That path is specific to the machine. Before sharing or
-deploying the generated project, change it to a released package or a
-deliberately managed repository reference. Nora does not yet publish a tagged
-package release.
+The generated project installs Nora from the official Git repository's
+`dev-main` branch, so it does not depend on the local framework checkout.
+That development branch is mutable; Nora does not yet publish a tagged
+package release. Before production use, review the release checklist and
+select an approved stable version when one is available. After `composer
+install`, run Nora's installed binary with
+`composer exec nora -- <command>` from the app root; this keeps the command's
+working directory on the application rather than the framework checkout.
 
 ## Inspect the PHP component
 
-The generated `src/routes.php` registers a `CounterPage` and mounts it at `/`.
+The generated `src/routes.php` registers `HomeController` at `/welcome` and
+mounts a `CounterPage` at `/`. The page links to the locally compiled
+`public/assets/app.css` stylesheet.
 `src/Reactive/CounterPage.php` extends `Nora\Reactive\Component`. Its
 `initialState()` returns server-owned state, `view(State $state)` composes
 escaped markup with `UI`, and `actions()` explicitly allowlists the
@@ -53,22 +61,38 @@ the same page state, so one authorized action updates both outputs. `UI`
 escapes text and attributes, rejects event-handler/style attributes and unsafe
 URL schemes, and creates protocol-ready buttons without hand-written HTML.
 `State::computed()` derives a render-time value from the immutable state
-snapshot. The framework adds its document-level runtime script and the Nora
-UI stylesheet automatically; no custom JavaScript or per-component mounting
-code is required.
+snapshot. The framework adds its document-level runtime script. Tailwind CSS
+v4 is compiled locally through its official CLI; no CDN, runtime compiler,
+custom JavaScript, or per-component mounting code is required. The generated
+input scans `src/`, which includes PHP and `.nora` templates without scanning
+dependencies or generated output. `HomeController` renders
+`src/Views/home.nora` through `TemplateRenderer`, which escapes interpolated
+values. App classes use Composer's `App\` to `src/` PSR-4 mapping; routes are
+registered explicitly, with no class or route discovery. Use
+`npm run nora:assets:dev` and `npm run nora:assets:build` for CSS workflows.
+The framework's `assets:dev`, `assets:build`, and `assets:check` CLI commands
+are available when using a Nora checkout that includes the Tailwind CLI
+integration. Add `@source` directives for any other application directories
+containing utility classes.
 
 ## Run and interact
 
 Start the development server from the generated project:
 
 ```powershell
-php ..\bin\nora serve
+composer exec nora -- serve
 ```
+
+For active CSS development, start `composer exec nora -- assets:dev` in another
+terminal before or alongside the web server. The build output is same-origin;
+production deployments should run `assets:build` as part of their release
+build and serve the resulting static CSS file.
 
 Open `http://127.0.0.1:8000/`. Click either counter button: both displayed
 counts should advance without a document navigation. Enter text into the
 unsubmitted note field and click a button; the field value and activated
-control focus should remain. Stop the development server with `Ctrl+C`.
+control focus should remain. Visit `/welcome` to see the generated controller
+and view. Stop the development server with `Ctrl+C`.
 
 The generated app performs a real same-origin `POST` to Nora. It sends a
 session-bound page handle, an action name, validated arguments, a CSRF token,
@@ -90,6 +114,24 @@ $app->route(
 
 Routes are matched in registration order. Register specific routes before
 overlapping parameterized routes.
+
+Generate additional application source files from the app root:
+
+```powershell
+composer exec nora -- make:controller Profile
+composer exec nora -- make:middleware RequestLog
+composer exec nora -- make:service ProfileReader
+composer exec nora -- make:component ProfilePanel
+composer exec nora -- make:view profile
+composer exec nora -- make:test Profile
+```
+
+These commands create classes or templates under `src/`; register routes and
+middleware explicitly in `src/routes.php`. `make:component` creates a Nora
+reactive page component, not an automatically discovered view component.
+Services are plain classes instantiated by application code; there is no
+service container. `make:test` creates a PHPUnit feature test under
+`tests/Feature`; the scaffold installs PHPUnit as a development dependency.
 
 ## Verify the browser behavior
 

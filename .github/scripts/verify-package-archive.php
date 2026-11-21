@@ -188,6 +188,12 @@ try {
             is_array($packageManifest) && ($packageManifest['name'] ?? null) === 'morave/nora',
             'The archived manifest does not describe morave/nora.',
         );
+        assertPackageCheck(
+            isset($packageManifest['require']['ext-pdo'])
+                && !isset($packageManifest['require']['ext-pdo_mysql'])
+                && isset($packageManifest['suggest']['ext-pdo_mysql']),
+            'The package must require PDO but only suggest the optional MySQL/MariaDB PDO driver.',
+        );
     } finally {
         $zip->close();
     }

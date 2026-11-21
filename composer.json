@@ -22,8 +22,10 @@
     "ext-filter": "*",
     "ext-json": "*",
     "ext-pdo": "*",
-    "ext-pdo_mysql": "*",
     "ext-session": "*"
+  },
+  "suggest": {
+    "ext-pdo_mysql": "Required when using the MySQL or MariaDB database integration."
   },
   "require-dev": {
     "phpunit/phpunit": "^11.5"

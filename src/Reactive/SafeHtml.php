@@ -130,7 +130,36 @@ final readonly class SafeHtml
             throw new InvalidArgumentException('Attributes can only be added to an HTML element.');
         }
 
-        return self::element($this->value, [...$this->attributes, ...$attributes], $this->children);
+        $existingAttributes = $this->attributes;
+        $classAttribute = '';
+        $hasClass = false;
+        foreach ($existingAttributes as $name => $value) {
+            if (strtolower($name) === 'class') {
+                if (!is_string($value)) {
+                    throw new InvalidArgumentException('HTML class attributes must be strings.');
+                }
+                $classAttribute = $value;
+                $hasClass = true;
+                unset($existingAttributes[$name]);
+                break;
+            }
+        }
+        foreach ($attributes as $name => $value) {
+            if (is_string($name) && strtolower($name) === 'class') {
+                if ($value !== null && !is_string($value)) {
+                    throw new InvalidArgumentException('HTML class attributes must be strings or null.');
+                }
+                $classAttribute = trim($classAttribute . ' ' . ($value ?? ''));
+                $hasClass = true;
+                unset($attributes[$name]);
+                break;
+            }
+        }
+        if ($hasClass) {
+            $attributes['class'] = $classAttribute;
+        }
+
+        return self::element($this->value, [...$existingAttributes, ...$attributes], $this->children);
     }
 
     public function isFormControl(): bool

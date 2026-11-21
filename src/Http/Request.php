@@ -393,6 +393,7 @@ final class Request
         if (($metadata['error'] ?? null) === UPLOAD_ERR_NO_FILE) {
             return;
         }
-        $uploads[] = UploadedFile::fromPhpArray($metadata);
+        $allowNonUploadedTempFile = in_array(PHP_SAPI, ['cli', 'phpdbg'], true);
+        $uploads[] = UploadedFile::fromPhpArray($metadata, $allowNonUploadedTempFile);
     }
 }

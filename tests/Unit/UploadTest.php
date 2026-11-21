@@ -109,7 +109,7 @@ final class UploadTest extends TestCase
                 'tmp_name' => $path,
                 'error' => UPLOAD_ERR_PARTIAL,
                 'size' => 4,
-            ]);
+            ], true);
             self::fail('Expected a partial upload to be rejected.');
         } catch (UploadException) {
             self::assertTrue(true);
@@ -123,11 +123,40 @@ final class UploadTest extends TestCase
             ] as $metadata
         ) {
             try {
-                UploadedFile::fromPhpArray($metadata);
+                UploadedFile::fromPhpArray($metadata, true);
                 self::fail('Expected malformed upload metadata to be rejected.');
             } catch (UploadException) {
                 self::assertTrue(true);
             }
+        }
+    }
+
+    public function testRejectsNonUploadedAndArbitraryFilesByDefault(): void
+    {
+        $path = $this->temporaryFile('fixture-data');
+        try {
+            UploadedFile::fromPhpArray([
+                'name' => 'file.txt',
+                'tmp_name' => $path,
+                'error' => UPLOAD_ERR_OK,
+                'size' => strlen('fixture-data'),
+            ]);
+            self::fail('Expected a non-uploaded temporary file to be rejected by default.');
+        } catch (UploadException $exception) {
+            self::assertSame(400, $exception->status());
+        }
+
+        $readablePath = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'README.md';
+        try {
+            UploadedFile::fromPhpArray([
+                'name' => 'README.md',
+                'tmp_name' => $readablePath,
+                'error' => UPLOAD_ERR_OK,
+                'size' => filesize($readablePath) ?: 0,
+            ]);
+            self::fail('Expected an arbitrary readable file path to be rejected by default.');
+        } catch (UploadException $exception) {
+            self::assertSame(400, $exception->status());
         }
     }
 
@@ -211,7 +240,7 @@ final class UploadTest extends TestCase
                 'tmp_name' => '',
                 'error' => UPLOAD_ERR_INI_SIZE,
                 'size' => 0,
-            ]);
+            ], true);
             self::fail('Expected PHP upload size errors to be rejected.');
         } catch (UploadException $exception) {
             self::assertSame(413, $exception->status());
@@ -287,7 +316,7 @@ final class UploadTest extends TestCase
                 'tmp_name' => $uploadPath,
                 'error' => UPLOAD_ERR_OK,
                 'size' => strlen('partial upload contents'),
-            ]));
+            ], true));
         unlink($uploadPath);
 
         try {
@@ -454,7 +483,7 @@ final class UploadTest extends TestCase
             'error' => UPLOAD_ERR_OK,
             'size' => strlen($contents),
             'type' => 'application/octet-stream',
-        ]);
+        ], true);
     }
 
     private function temporaryFile(string $contents): string

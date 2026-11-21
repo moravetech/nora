@@ -11,10 +11,11 @@
 **/.env
 **/.env.*
 !**/.env.example
-
+/security
 # Test, coverage, and browser-run output
 /.phpunit.cache/
 **/.phpunit.cache/
+/examples/nora-tailwind-dashboard/public/assets/app.css
 /coverage/
 **/coverage/
 /playwright-report/

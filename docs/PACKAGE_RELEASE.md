@@ -117,9 +117,10 @@ outside the framework release.
 
 The current `bin/nora` entry point supports both the repository checkout
 autoload path and the Composer-installed project autoloader. Generated
-projects still use a path repository to the framework installation that
-created them; those generated manifests are machine-local until changed to a
-released package or another deliberately managed repository source.
+projects configure the official Git VCS repository and require `dev-main`.
+This was verified with a clean Composer consumer install, but it follows a
+moving development branch and is not a stable release. Update generated apps
+to an owner-approved tag once a release exists.
 
 The CI job `package-consumer` runs
 [`verify-package-archive.php`](../.github/scripts/verify-package-archive.php).

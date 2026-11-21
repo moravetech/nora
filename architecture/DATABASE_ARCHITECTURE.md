@@ -44,7 +44,9 @@ attempt automatic schema rollback. Unit migration tests use a PDO test double;
 the live MySQL integration tests are configured below but were not executed in
 this local environment because no server is available.
 
-The framework uses PDO's MySQL driver (`pdo_mysql`). CI configures a disposable
+The Composer package requires the base PDO extension; `pdo_mysql` is optional
+and needed only when an application uses MySQL/MariaDB. The current live
+integration baseline uses PDO's MySQL driver. CI configures a disposable
 MySQL 8.4 service; the integration tests require a database explicitly named
 `nora_test` or `nora_test_<suffix>` and matching `NORA_TEST_DB_NAME`. Hosted CI
 results are not established by the repository configuration alone. MariaDB

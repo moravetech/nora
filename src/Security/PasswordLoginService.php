@@ -27,7 +27,12 @@ final class PasswordLoginService
         $passwordHash = $account?->passwordHash() ?? self::dummyPasswordHash($this->passwordHasher);
         $passwordMatches = $this->passwordHasher->verify($password, $passwordHash);
 
-        if ($account === null || !$passwordMatches || !$account->isEnabled()) {
+        if (
+            $account === null
+            || !$passwordMatches
+            || !$account->isEnabled()
+            || ($account instanceof EmailVerifiableAccountInterface && !$account->isEmailVerified())
+        ) {
             return PasswordLoginResult::rejected();
         }
 

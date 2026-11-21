@@ -13,8 +13,9 @@ final class Card
 {
     /**
      * @param array<string, mixed> $props
+     * @param array<string, mixed> $attributes
      */
-    public static function render(array $props, Slots $slots): SafeHtml
+    public static function render(array $props, Slots $slots, array $attributes = []): SafeHtml
     {
         $resolved = Props::resolve([
             'as' => ['type' => 'string', 'default' => 'section', 'one_of' => ['article', 'section', 'div']],
@@ -50,6 +51,6 @@ final class Card
             $header,
             UI::element('div', ['class' => 'nora-card__body'], $slots->get('default')),
             UI::when($slots->has('footer'), UI::element('footer', ['class' => 'nora-card__footer'], $slots->get('footer'))),
-        ]);
+        ])->withAttributes($attributes);
     }
 }

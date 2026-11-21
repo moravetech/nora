@@ -325,6 +325,41 @@ final class ReactiveLifecycleTest extends TestCase
         self::assertStringNotContainsString('<title>Nora <script>', $response->body());
     }
 
+    public function testMountedPageCanUseApplicationTailwindStylesheetOrDisableTheDefaultTheme(): void
+    {
+        foreach ([
+            ['/assets/app.css', '<link rel="stylesheet" href="/assets/app.css">'],
+            [null, ''],
+        ] as [$stylesheetPath, $expectedLink]) {
+            $engine = new ReactiveEngine(new SessionManager(false));
+            $engine->register('counter', new IntegrationCounterComponent());
+            $app = new Application();
+            $engine->mount($app, 'counter', '/', 'Nora', $stylesheetPath);
+
+            $response = $app->handle(Request::fromUri('GET', '/'));
+
+            self::assertSame(200, $response->status());
+            self::assertStringContainsString($expectedLink, $response->body());
+            if ($stylesheetPath === null) {
+                self::assertStringNotContainsString('/_nora/ui.css', $response->body());
+            }
+        }
+    }
+
+    public function testMountedStylesheetRejectsExternalAndTraversalPaths(): void
+    {
+        foreach (['https://example.test/app.css', '//example.test/app.css', '/../private.css'] as $path) {
+            $engine = new ReactiveEngine(new SessionManager(false));
+            $engine->register('counter', new IntegrationCounterComponent());
+            try {
+                $engine->mount(new Application(), 'counter', '/', 'Nora', $path);
+                self::fail('Unsafe stylesheet paths must be rejected.');
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     public function testTemplateRenderedReactiveStateIsEscapedAfterAnAction(): void
     {
         $template = $this->sessionDirectory . DIRECTORY_SEPARATOR . 'message.nora';

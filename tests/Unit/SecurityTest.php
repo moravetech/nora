@@ -177,6 +177,40 @@ final class SecurityTest extends TestCase
             rmdir($savePath);
         }
     }
+
+    public function testIdleSessionTimeoutInvalidatesExpiredSessionData(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            self::markTestSkipped('A PHP session is already active.');
+        }
+
+        $savePath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'nora-session-' . bin2hex(random_bytes(5));
+        self::assertTrue(mkdir($savePath));
+        $previousSavePath = session_save_path();
+        session_save_path($savePath);
+        session_id('');
+        $manager = new SessionManager(false, 60, 0);
+
+        try {
+            $manager->start();
+            $manager->set('auth.user_id', 'user-1');
+            $_SESSION['_nora.session.last_activity'] = time() - 120;
+            self::assertFalse($manager->has('auth.user_id'));
+            self::assertNull($manager->get('auth.user_id'));
+            self::assertTrue(is_int($_SESSION['_nora.session.created_at'] ?? null));
+            self::assertTrue(is_int($_SESSION['_nora.session.last_activity'] ?? null));
+            $manager->destroy();
+        } finally {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_destroy();
+            }
+            session_save_path($previousSavePath);
+            foreach (glob($savePath . DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
+                unlink($file);
+            }
+            rmdir($savePath);
+        }
+    }
 }
 
 /**

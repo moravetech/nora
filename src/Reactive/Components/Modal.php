@@ -13,9 +13,20 @@ final class Modal
 {
     /**
      * @param array<string, mixed> $props
+     * @param array<string, mixed> $attributes
      */
-    public static function render(array $props, SafeHtml $content): SafeHtml
+    public static function render(array $props, SafeHtml $content, array $attributes = []): SafeHtml
     {
+        foreach (array_keys($attributes) as $name) {
+            if (
+                !is_string($name)
+                || in_array(strtolower($name), [
+                    'id', 'aria-labelledby', 'aria-describedby', 'data-nora-modal-state',
+                ], true)
+            ) {
+                throw new InvalidArgumentException('Modal attributes cannot override its identity or dialog state.');
+            }
+        }
         $resolved = Props::resolve([
             'id' => ['type' => 'string', 'required' => true],
             'title' => ['type' => 'string', 'required' => true],
@@ -69,7 +80,7 @@ final class Modal
                         'data-nora-modal-close-action' => true,
                     ])
                     : UI::fragment([]),
-            ]),
+            ])->withAttributes($attributes),
         ]);
     }
 }

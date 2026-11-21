@@ -72,7 +72,7 @@ browser tests, CLI scaffold, package metadata, and this specification:
 | Component discovery/automatic resolution, component test helpers, and development diagnostics | Not implemented; explicit registration remains deterministic. Reusable page shells are provided by `Components\Layout`. |
 | Typed props/defaults and named slots | Implemented by `Props` and `Slots` for rendering helpers; nested reactive children continue to use their existing `propsRules()` contract. |
 | UI kit | Server-rendered layout, feedback, form, data, and interaction helpers; native-dialog Modal; runtime-enhanced Tabs and Dropdown. The API reference catalogs the components and constraints; local Chromium covers integrated demo actions, validation, keyboard interactions, and focus behavior. |
-| UI assets | Bundled custom-property theme served at `/_nora/ui.css` for mounted pages; no build step or external package required. |
+| UI assets | Existing apps retain the bundled theme at `/_nora/ui.css` by default. `mount()` can instead link a same-origin application stylesheet (including compiled Tailwind CSS) or omit the framework theme; Tailwind v4 is built locally with the official CLI and has no runtime compiler/CDN dependency. |
 
 `Component` is an optional adapter over `ReactiveComponent`, not a second
 engine. It finalizes `render(array): string`, passes an immutable `State`
@@ -96,11 +96,13 @@ Nested child props remain validated through `propsRules()` and Nora's
 `Validator`. The independent `Props` helper provides strict types, defaults,
 required values, and enum constraints for render components; `Slots` passes
 only `SafeHtml` through default/named slots. `Card` demonstrates named slot
-composition. `.nora` partial includes remain available for reuse. General
-page layout integration, a server-side form object, automatic component
-discovery, and build-time asset manifests remain future work. Mounted reactive
-pages automatically load the static Nora theme from `/_nora/ui.css`; it uses
-custom properties and follows the browser's color scheme.
+composition. `.nora` partial includes remain available for reuse. General page layout integration, a server-side form object, automatic
+component discovery, and build-time asset manifests remain future work.
+Mounted reactive pages continue to load the static Nora theme by default for
+compatibility. Applications can pass a same-origin stylesheet path as the
+fifth `mount()` argument to use compiled Tailwind CSS instead; the Tailwind
+initializer scans explicit application source paths, not dependencies or
+generated output.
 
 ## Component and action contract
 

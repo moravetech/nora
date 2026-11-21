@@ -14,6 +14,7 @@
 | Security | Session middleware/cookies, fixation rotation, CSRF invalidation, password APIs, Gate, CSRF | Unit and CSRF integration |
 | Views | Plain text `.nora`, escaped values, includes, path/cycle checks | Unit and integration |
 | Reactive UI | SSR component pages, explicit actions, session state, CSRF/revisions, delegated browser runtime and keyed DOM updates | PHP integration tests and generated-app Playwright E2E |
+| Tailwind CSS | Official Tailwind CSS v4 CLI integration, explicit PHP/template source detection, scaffold and Nora asset commands; compiled app CSS is served as a same-origin static asset | CLI tests, production CSS utility assertions, generated-app and dashboard Playwright |
 | AI integration | None | Planned |
 | Deployment | Documentation only | Not validated on Linux/Apache/Nginx |
 
